@@ -1,0 +1,157 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  --background: oklch(0.978 0.005 250);
+  --foreground: oklch(0.243 0.045 254);
+  --surface: oklch(1 0 0);
+  --surface-foreground: oklch(0.243 0.045 254);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.243 0.045 254);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.243 0.045 254);
+
+  --primary: oklch(0.546 0.216 263);
+  --primary-foreground: oklch(0.99 0.004 250);
+  --primary-soft: oklch(0.94 0.032 258);
+
+  --secondary: oklch(0.955 0.011 254);
+  --secondary-foreground: oklch(0.31 0.048 255);
+  --muted: oklch(0.958 0.009 254);
+  --muted-foreground: oklch(0.535 0.032 256);
+  --accent: oklch(0.93 0.038 240);
+  --accent-foreground: oklch(0.28 0.05 255);
+
+  --destructive: oklch(0.585 0.219 27);
+  --destructive-foreground: oklch(0.99 0.004 250);
+
+  --border: oklch(0.912 0.014 254);
+  --input: oklch(0.9 0.016 254);
+  --ring: oklch(0.546 0.216 263);
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --gradient-hero: linear-gradient(
+    160deg,
+    oklch(0.99 0.006 250) 0%,
+    oklch(0.955 0.024 253) 55%,
+    oklch(0.93 0.045 258) 100%
+  );
+  --gradient-primary: linear-gradient(135deg, oklch(0.546 0.216 263), oklch(0.63 0.17 235));
+  --shadow-card: 0 1px 2px oklch(0.243 0.045 254 / 0.04), 0 8px 24px -12px oklch(0.243 0.045 254 / 0.12);
+  --shadow-lift: 0 2px 4px oklch(0.243 0.045 254 / 0.05), 0 18px 40px -16px oklch(0.243 0.045 254 / 0.22);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+@utility bg-hero {
+  background-image: var(--gradient-hero);
+}
+
+@utility bg-brand-gradient {
+  background-image: var(--gradient-primary);
+}
+
+@utility text-brand-gradient {
+  background-image: var(--gradient-primary);
+  background-clip: text;
+  color: transparent;
+}
+
+@utility prose-article {
+  & p {
+    margin-block: 1.15rem;
+    line-height: 1.8;
+    color: var(--color-foreground);
+  }
+  & h2 {
+    margin-block: 2rem 0.75rem;
+    font-size: 1.55rem;
+    font-weight: 600;
+  }
+  & h3 {
+    margin-block: 1.5rem 0.5rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+  & ul {
+    margin-block: 1rem;
+    padding-inline-start: 1.25rem;
+    list-style: disc;
+  }
+  & li {
+    margin-block: 0.4rem;
+    line-height: 1.7;
+  }
+  & a {
+    color: var(--color-primary);
+    text-decoration: underline;
+  }
+  & blockquote {
+    margin-block: 1.5rem;
+    border-inline-start: 3px solid var(--color-primary);
+    padding-inline-start: 1rem;
+    font-style: italic;
+    color: var(--color-muted-foreground);
+  }
+}
