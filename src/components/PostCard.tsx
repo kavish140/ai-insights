@@ -8,6 +8,21 @@ export function PostCard({ post, size = "default" }: { post: Post; size?: "defau
         size === "large" ? "md:p-8" : ""
       }`}
     >
+      {post.cover_image_url && (
+        <Link
+          to="/blog/$slug"
+          params={{ slug: post.slug }}
+          className="mb-5 block overflow-hidden rounded-xl"
+        >
+          <img
+            src={post.cover_image_url}
+            alt={post.cover_image_alt ?? ""}
+            loading="lazy"
+            decoding="async"
+            className="aspect-[16/9] w-full object-cover"
+          />
+        </Link>
+      )}
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span className="rounded-full bg-primary-soft px-2.5 py-1 font-medium text-primary">
           {post.category}

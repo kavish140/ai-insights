@@ -343,6 +343,22 @@
 }
 
 @utility prose-article {
+  & img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-block: 1.5rem;
+    border-radius: 0.75rem;
+  }
+  & figure {
+    margin-block: 2rem;
+  }
+  & figcaption {
+    margin-block-start: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--color-muted-foreground);
+  }
   & p {
     margin-block: 1.15rem;
     line-height: 1.8;

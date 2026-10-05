@@ -1,0 +1,4 @@
+project_id = "ai-insights"
+
+[functions.blog-mcp]
+verify_jwt = false

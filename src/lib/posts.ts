@@ -7,6 +7,8 @@ export type Post = {
   readingMinutes: number;
   author: string;
   featured?: boolean;
+  cover_image_url?: string;
+  cover_image_alt?: string;
   /** Simple HTML body. */
   body: string;
 };

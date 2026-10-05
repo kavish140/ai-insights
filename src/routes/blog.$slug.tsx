@@ -30,8 +30,20 @@ export const Route = createFileRoute("/blog/$slug")({
         { property: "og:description", content: post.description },
         { property: "og:type", content: "article" },
         { property: "og:url", content: url },
-        { property: "og:image", content: SITE.url + "/images/og-cover.jpg" },
-        { name: "twitter:image", content: SITE.url + "/images/og-cover.jpg" },
+        {
+          property: "og:image",
+          content: post.cover_image_url || SITE.url + "/images/og-cover.jpg",
+        },
+        {
+          name: "twitter:image",
+          content: post.cover_image_url || SITE.url + "/images/og-cover.jpg",
+        },
+        ...(post.cover_image_url
+          ? [
+              { property: "og:image:alt", content: post.cover_image_alt ?? "" },
+              { name: "twitter:image:alt", content: post.cover_image_alt ?? "" },
+            ]
+          : []),
         { property: "article:published_time", content: post.date },
         { property: "article:section", content: post.category },
       ],
@@ -49,7 +61,7 @@ export const Route = createFileRoute("/blog/$slug")({
             author: { "@type": "Person", name: post.author },
             publisher: { "@type": "Organization", name: SITE.name },
             mainEntityOfPage: { "@type": "WebPage", "@id": url },
-            image: SITE.url + "/images/og-cover.jpg",
+            image: post.cover_image_url || SITE.url + "/images/og-cover.jpg",
           }),
         },
         {
@@ -72,11 +84,6 @@ export const Route = createFileRoute("/blog/$slug")({
 
 function PostPage() {
   const { post, related } = Route.useLoaderData();
-
-  const half = Math.ceil(post.body.split("</p>").length / 2);
-  const parts = post.body.split("</p>");
-  const firstHalf = parts.slice(0, half).join("</p>") + (half < parts.length ? "</p>" : "");
-  const secondHalf = parts.slice(half).join("</p>");
 
   return (
     <article>
@@ -103,6 +110,15 @@ function PostPage() {
             <span aria-hidden="true">·</span>
             <span>{post.readingMinutes} min read</span>
           </div>
+          {post.cover_image_url && (
+            <img
+              src={post.cover_image_url}
+              alt={post.cover_image_alt ?? ""}
+              fetchPriority="high"
+              decoding="async"
+              className="mt-8 aspect-[16/9] w-full rounded-2xl object-cover"
+            />
+          )}
         </div>
       </header>
 
@@ -110,15 +126,11 @@ function PostPage() {
         <div className="min-w-0">
           <div
             className="prose-article max-w-none"
-            dangerouslySetInnerHTML={{ __html: firstHalf }}
+            dangerouslySetInnerHTML={{ __html: post.body }}
           />
           <div className="my-10">
             <AdSlot format="in-article" />
           </div>
-          <div
-            className="prose-article max-w-none"
-            dangerouslySetInnerHTML={{ __html: secondHalf }}
-          />
 
           <section className="mt-16">
             <h2 className="text-2xl font-semibold">Keep reading</h2>

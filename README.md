@@ -65,6 +65,14 @@ the empty homepage. It does not write to your Supabase project.
 
 The Contact form and advertising placements remain placeholders.
 
+## Blog MCP
+
+The Supabase Edge Function `blog-mcp` lets Claude manage drafts and publish on
+explicit request. It is public and unauthenticated, as requested. See
+`supabase/functions/blog-mcp/README.md` for tools, manual deployment, and checks.
+The separate server package owns its pinned dependencies and lockfile; the
+website build does not bundle or deploy this function.
+
 ---
 
 This project was built with [Lovable](https://lovable.dev).

@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 
 // Exercise the production Worker with a local Supabase API fixture, without changing real data.
+const imageUrl = `https://gutvbukqlqutjwlbmfpr.supabase.co/storage/v1/object/public/blog-images/articles/${"a".repeat(64)}.png`;
 const article = {
   slug: "ssr-check",
   title: "SSR test article",
@@ -12,7 +13,9 @@ const article = {
   reading_minutes: 2,
   author: "AI Insights",
   featured: true,
-  body: '<p>Visible without JavaScript.</p><script>unsafe_marker</script><p onclick="unsafe_marker()">Safe paragraph.</p><a href="javascript:unsafe_marker()">Link</a>',
+  cover_image_url: imageUrl,
+  cover_image_alt: "SSR cover image",
+  body: `<p>Visible without JavaScript.</p><script>unsafe_marker</script><p onclick="unsafe_marker()">Safe paragraph.</p><a href="javascript:unsafe_marker()">Link</a><figure><img src="${imageUrl}" alt="SSR inline image" onerror="unsafe_marker()"><figcaption>SSR image caption</figcaption></figure><img src="https://evil.example/unsafe_marker.png" alt="Unsafe image">`,
 };
 let empty = false;
 let queries = 0;
@@ -79,6 +82,10 @@ try {
       assert.ok(html.includes("Visible without JavaScript."));
       assert.ok(html.includes("BlogPosting"));
       assert.ok(html.includes('rel="canonical"'));
+      assert.ok(html.includes('alt="SSR cover image"'));
+      assert.ok(html.includes('alt="SSR inline image"'));
+      assert.ok(html.includes("SSR image caption"));
+      assert.ok(html.includes('property="og:image" content="' + imageUrl + '"'));
     }
   }
   const sitemap = await fetch("http://127.0.0.1:8787/sitemap.xml");
