@@ -1,3 +1,4 @@
+import { socialMeta, DEFAULT_SOCIAL_IMAGE } from "@/lib/social-meta";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
@@ -26,24 +27,16 @@ export const Route = createFileRoute("/blog/$slug")({
       meta: [
         { title: `${post.title} — AI Insights` },
         { name: "description", content: post.description },
-        { property: "og:title", content: post.title },
-        { property: "og:description", content: post.description },
-        { property: "og:type", content: "article" },
-        { property: "og:url", content: url },
-        {
-          property: "og:image",
-          content: post.cover_image_url || SITE.url + "/images/og-cover.jpg",
-        },
-        {
-          name: "twitter:image",
-          content: post.cover_image_url || SITE.url + "/images/og-cover.jpg",
-        },
-        ...(post.cover_image_url
-          ? [
-              { property: "og:image:alt", content: post.cover_image_alt ?? "" },
-              { name: "twitter:image:alt", content: post.cover_image_alt ?? "" },
-            ]
-          : []),
+        ...socialMeta({
+          title: post.title,
+          description: post.description,
+          path: "/blog/" + params.slug,
+          type: "article",
+          image: post.cover_image_url || DEFAULT_SOCIAL_IMAGE,
+          imageAlt: post.cover_image_url ? post.cover_image_alt || post.title : undefined,
+        }),
+        { name: "author", content: post.author },
+        { property: "article:modified_time", content: post.updatedAt || post.date },
         { property: "article:published_time", content: post.date },
         { property: "article:section", content: post.category },
       ],
@@ -57,7 +50,7 @@ export const Route = createFileRoute("/blog/$slug")({
             headline: post.title,
             description: post.description,
             datePublished: post.date,
-            dateModified: post.date,
+            dateModified: post.updatedAt || post.date,
             author: { "@type": "Person", name: post.author },
             publisher: { "@type": "Organization", name: SITE.name },
             mainEntityOfPage: { "@type": "WebPage", "@id": url },

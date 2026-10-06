@@ -4,6 +4,7 @@ export type Post = {
   description: string;
   category: string;
   date: string;
+  updatedAt?: string;
   readingMinutes: number;
   author: string;
   featured?: boolean;

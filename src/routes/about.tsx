@@ -1,3 +1,4 @@
+import { socialMeta } from "@/lib/social-meta";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SITE } from "@/lib/posts";
 
@@ -10,12 +11,12 @@ export const Route = createFileRoute("/about")({
         content:
           "AI Insights publishes practical AI automation guides and awareness pieces for people who want useful answers, not hype.",
       },
-      { property: "og:title", content: "About AI Insights" },
-      {
-        property: "og:description",
-        content: "Practical AI automation guides and awareness pieces, written without hype.",
-      },
-      { property: "og:url", content: SITE.url + "/about" },
+      ...socialMeta({
+        title: "About AI Insights — Who Writes This & Why",
+        description:
+          "AI Insights publishes practical AI automation guides and awareness pieces for people who want useful answers, not hype.",
+        path: "/about",
+      }),
     ],
     links: [{ rel: "canonical", href: SITE.url + "/about" }],
   }),

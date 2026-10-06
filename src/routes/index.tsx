@@ -1,3 +1,4 @@
+import { socialMeta } from "@/lib/social-meta";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
@@ -14,15 +15,12 @@ export const Route = createFileRoute("/")({
         content:
           "Clear guides on AI automation, agents and workflows, plus honest awareness pieces on privacy and misinformation.",
       },
-      { property: "og:title", content: "AI Insights — Practical AI Automation & Awareness" },
-      {
-        property: "og:description",
-        content:
+      ...socialMeta({
+        title: "AI Insights — Practical AI Automation & Awareness",
+        description:
           "Clear guides on AI automation, agents and workflows, plus honest awareness pieces on privacy and misinformation.",
-      },
-      { property: "og:url", content: SITE.url + "/" },
-      { property: "og:image", content: SITE.url + "/images/og-cover.jpg" },
-      { name: "twitter:image", content: SITE.url + "/images/og-cover.jpg" },
+        path: "/",
+      }),
     ],
     links: [{ rel: "canonical", href: SITE.url + "/" }],
   }),

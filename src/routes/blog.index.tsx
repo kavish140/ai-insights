@@ -1,3 +1,4 @@
+import { socialMeta } from "@/lib/social-meta";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
@@ -19,15 +20,12 @@ export const Route = createFileRoute("/blog/")({
         content:
           "Every AI Insights article: automation playbooks, agent vs workflow guidance, privacy and misinformation awareness, and ROI frameworks.",
       },
-      { property: "og:title", content: "All Articles on AI Automation & Awareness" },
-      {
-        property: "og:description",
-        content:
-          "Automation playbooks, agent guidance, privacy awareness and ROI frameworks for AI at work.",
-      },
-      { property: "og:url", content: SITE.url + "/blog" },
-      { property: "og:image", content: SITE.url + "/images/og-cover.jpg" },
-      { name: "twitter:image", content: SITE.url + "/images/og-cover.jpg" },
+      ...socialMeta({
+        title: "All Articles on AI Automation & Awareness — AI Insights",
+        description:
+          "Every AI Insights article: automation playbooks, agent vs workflow guidance, privacy and misinformation awareness, and ROI frameworks.",
+        path: "/blog",
+      }),
     ],
     links: [{ rel: "canonical", href: SITE.url + "/blog" }],
   }),

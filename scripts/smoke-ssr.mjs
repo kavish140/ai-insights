@@ -10,6 +10,7 @@ const article = {
   description: "An article rendered by the server.",
   category: "Automation",
   date: "2026-10-05",
+  updated_at: "2026-10-06T00:00:00Z",
   reading_minutes: 2,
   author: "AI Insights",
   featured: true,
@@ -18,6 +19,7 @@ const article = {
   body: `<p>Visible without JavaScript.</p><script>unsafe_marker</script><p onclick="unsafe_marker()">Safe paragraph.</p><a href="javascript:unsafe_marker()">Link</a><figure><img src="${imageUrl}" alt="SSR inline image" onerror="unsafe_marker()"><figcaption>SSR image caption</figcaption></figure><img src="https://evil.example/unsafe_marker.png" alt="Unsafe image">`,
 };
 let empty = false;
+let coverEnabled = true;
 let queries = 0;
 const database = createServer((request, response) => {
   const url = new URL(request.url, "http://localhost");
@@ -30,7 +32,19 @@ const database = createServer((request, response) => {
   assert.match(url.searchParams.get("date"), /^lte\.\d{4}-\d{2}-\d{2}$/);
   queries++;
   response.writeHead(200, { "content-type": "application/json" });
-  response.end(JSON.stringify(empty ? [] : [article]));
+  response.end(
+    JSON.stringify(
+      empty
+        ? []
+        : [
+            {
+              ...article,
+              cover_image_url: coverEnabled ? imageUrl : "",
+              cover_image_alt: coverEnabled ? article.cover_image_alt : "",
+            },
+          ],
+    ),
+  );
 });
 await new Promise((resolve) => database.listen(54322, "127.0.0.1", resolve));
 const worker = spawn(
@@ -72,6 +86,58 @@ try {
     }
   }
   assert.ok(ready, logs);
+  function metaContent(html, attribute, key) {
+    const tags = [...html.matchAll(/<meta\b[^>]*>/g)]
+      .map((match) => match[0])
+      .filter((tag) => tag.includes(`${attribute}="${key}"`));
+    assert.equal(tags.length, 1, `Expected exactly one ${key} tag`);
+    return tags[0].match(/content="([^"]*)"/)?.[1];
+  }
+  for (const path of ["/", "/blog", "/about", "/contact", "/blog/ssr-check"]) {
+    const response = await fetch(`http://127.0.0.1:8787${path}`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.ok(metaContent(html, "property", "og:title"));
+    assert.ok(metaContent(html, "property", "og:description"));
+    assert.equal(
+      metaContent(html, "property", "og:url"),
+      `https://ai-insights.sitenova.dev${path}`,
+    );
+    assert.equal(
+      metaContent(html, "property", "og:type"),
+      path === "/blog/ssr-check" ? "article" : "website",
+    );
+    assert.equal(metaContent(html, "name", "twitter:card"), "summary_large_image");
+    assert.equal(
+      metaContent(html, "name", "twitter:title"),
+      metaContent(html, "property", "og:title"),
+    );
+    assert.equal(
+      metaContent(html, "name", "twitter:description"),
+      metaContent(html, "property", "og:description"),
+    );
+    assert.equal(
+      metaContent(html, "name", "twitter:image"),
+      metaContent(html, "property", "og:image"),
+    );
+    assert.ok(metaContent(html, "property", "og:image:alt"));
+    if (path === "/blog/ssr-check") {
+      assert.equal(metaContent(html, "property", "og:image"), imageUrl);
+      assert.equal(metaContent(html, "property", "og:image:type"), "image/png");
+      assert.equal(metaContent(html, "property", "article:modified_time"), article.updated_at);
+      assert.ok(
+        !html.includes('property="og:image:width"'),
+        "Do not invent dimensions for uploaded covers",
+      );
+    } else {
+      assert.equal(
+        metaContent(html, "property", "og:image"),
+        "https://ai-insights.sitenova.dev/images/og-cover.jpg",
+      );
+      assert.equal(metaContent(html, "property", "og:image:width"), "1200");
+      assert.equal(metaContent(html, "property", "og:image:height"), "640");
+    }
+  }
   for (const path of ["/", "/blog", "/blog/ssr-check"]) {
     const response = await fetch(`http://127.0.0.1:8787${path}`);
     assert.equal(response.status, 200, `${path}: ${await response.clone().text()}`);
@@ -93,13 +159,21 @@ try {
   assert.ok((await sitemap.text()).includes("/blog/ssr-check"));
   assert.equal((await fetch("http://127.0.0.1:8787/blog/unknown")).status, 404);
   assert.equal((await fetch("http://127.0.0.1:8787/admin")).status, 200);
+  coverEnabled = false;
+  const withoutCover = await fetch("http://127.0.0.1:8787/blog/ssr-check");
+  const fallbackHtml = await withoutCover.text();
+  assert.equal(
+    metaContent(fallbackHtml, "property", "og:image"),
+    "https://ai-insights.sitenova.dev/images/og-cover.jpg",
+  );
+  assert.equal(metaContent(fallbackHtml, "property", "og:image:width"), "1200");
   empty = true;
   const home = await fetch("http://127.0.0.1:8787/");
   assert.equal(home.status, 200);
   assert.ok((await home.text()).includes("Our first articles are coming soon."));
   assert.ok(queries >= 6);
   console.log(
-    "Passed: Worker SSR, article metadata, HTML sanitization, sitemap, 404, admin shell, and empty homepage.",
+    "Passed: Worker SSR, Open Graph and Twitter cards on public pages, cover/fallback previews, HTML sanitization, sitemap, 404, admin shell, and empty homepage.",
   );
 } finally {
   worker.kill();

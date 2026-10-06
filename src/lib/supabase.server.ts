@@ -86,6 +86,7 @@ export async function publishedPosts(): Promise<Post[]> {
     description: row.description,
     category: row.category,
     date: row.date,
+    updatedAt: row.updated_at,
     author: row.author,
     featured: row.featured,
     readingMinutes: row.reading_minutes,

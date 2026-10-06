@@ -1,3 +1,4 @@
+import { socialMeta } from "@/lib/social-meta";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { SITE } from "@/lib/posts";
@@ -11,12 +12,12 @@ export const Route = createFileRoute("/contact")({
         content:
           "Get in touch with AI Insights about article topics, corrections, collaborations or sponsorship enquiries.",
       },
-      { property: "og:title", content: "Contact AI Insights" },
-      {
-        property: "og:description",
-        content: "Suggest a topic, report a correction or ask about sponsorships.",
-      },
-      { property: "og:url", content: SITE.url + "/contact" },
+      ...socialMeta({
+        title: "Contact AI Insights — Questions, Topics & Sponsorships",
+        description:
+          "Get in touch with AI Insights about article topics, corrections, collaborations or sponsorship enquiries.",
+        path: "/contact",
+      }),
     ],
     links: [{ rel: "canonical", href: SITE.url + "/contact" }],
   }),
