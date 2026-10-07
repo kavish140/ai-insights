@@ -224,8 +224,16 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
       sort === "title"
         ? a.title.localeCompare(b.title)
         : sort === "oldest"
-          ? a.date.localeCompare(b.date)
-          : b.date.localeCompare(a.date),
+          ? a.date.localeCompare(b.date) ||
+            (a.updated_at ?? a.created_at ?? "").localeCompare(
+              b.updated_at ?? b.created_at ?? "",
+            ) ||
+            a.title.localeCompare(b.title)
+          : b.date.localeCompare(a.date) ||
+            (b.updated_at ?? b.created_at ?? "").localeCompare(
+              a.updated_at ?? a.created_at ?? "",
+            ) ||
+            a.title.localeCompare(b.title),
     );
   const totalPages = Math.max(1, Math.ceil(filtered.length / 20));
   const currentPage = Math.min(page, totalPages);
