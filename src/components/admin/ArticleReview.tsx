@@ -66,6 +66,13 @@ export function ArticleReview({
         )}
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">
+            Created:{" "}
+            {article.created_at ? new Date(article.created_at).toLocaleString() : "Unsaved draft"} ·
+            Last modified:{" "}
+            {article.updated_at ? new Date(article.updated_at).toLocaleString() : "Unsaved draft"} ·
+            Revision {article.revision ?? "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
             {article.category} · {article.author} · {article.status}
           </p>
           <h2 className="text-2xl font-bold">{article.title}</h2>
@@ -105,6 +112,60 @@ export function ArticleReview({
                 <p className="text-xs">
                   /{selected.snapshot.slug} · {selected.snapshot.category} ·{" "}
                   {selected.snapshot.status}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Source: {selected.source} · Actor:{" "}
+                  {selected.actor_id ??
+                    (selected.source === "admin" ? "Not recorded" : "MCP or baseline snapshot")}
+                </p>
+                <h4 className="text-sm font-medium">Compare with current article</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr>
+                        <th className="p-2">Field</th>
+                        <th className="p-2">Saved revision</th>
+                        <th className="p-2">Current article</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(
+                        [
+                          "title",
+                          "slug",
+                          "description",
+                          "category",
+                          "author",
+                          "date",
+                          "status",
+                          "featured",
+                          "cover_image_url",
+                          "cover_image_alt",
+                          "body",
+                        ] as const
+                      )
+                        .filter((key) => selected.snapshot[key] !== article[key])
+                        .map((key) => (
+                          <tr key={key} className="border-t border-border align-top">
+                            <th className="p-2">{key}</th>
+                            <td className="max-w-72 whitespace-pre-wrap break-all p-2">
+                              <div className="max-h-48 overflow-auto">
+                                {String(selected.snapshot[key] ?? "")}
+                              </div>
+                            </td>
+                            <td className="max-w-72 whitespace-pre-wrap break-all p-2">
+                              <div className="max-h-48 overflow-auto">
+                                {String(article[key] ?? "")}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Restoration loads an unpublished draft for review. Saving uses the current
+                  revision to prevent overwriting another editor's changes.
                 </p>
                 <details>
                   <summary className="text-sm">Saved content and metadata</summary>

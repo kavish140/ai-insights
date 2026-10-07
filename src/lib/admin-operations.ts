@@ -2,6 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const credentials = z.object({ token: z.string().min(1).max(10000) });
+export const scanContent = createServerFn({ method: "POST" })
+  .validator(credentials.extend({ postIds: z.array(z.string().uuid()).min(1).max(5) }))
+  .handler(async ({ data }) => {
+    const { scan } = await import("./admin-operations.server");
+    return scan(data.token, data.postIds);
+  });
 export const probeMcp = createServerFn({ method: "POST" })
   .validator(credentials)
   .handler(async ({ data }) => {
@@ -61,6 +67,9 @@ export type PublishingActivity = {
   post_id: string;
   action: string;
   source: string;
+  actor_id?: string | null;
+  request_id?: string | null;
+  previous_status?: string | null;
   revision: number;
   status: string | null;
   created_at: string;
@@ -70,6 +79,7 @@ export type Revision = {
   revision: number;
   snapshot: import("./admin").Article;
   source: string;
+  actor_id?: string | null;
   created_at: string;
 };
 export const retryableTools = [

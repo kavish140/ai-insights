@@ -72,7 +72,7 @@ export const messageFor = (error: unknown) => {
 // Page through every row so totals, filters and image usage include more than the API row limit.
 export async function allRows<T>(
   table: string,
-  order: string,
+  order: string | string[],
   filter?: { column: string; value: string },
 ): Promise<T[]> {
   const client = await browserClient();
@@ -81,8 +81,8 @@ export async function allRows<T>(
     let query = client
       .from(table)
       .select("*")
-      .order(order)
       .range(offset, offset + 499);
+    for (const column of typeof order === "string" ? [order] : order) query = query.order(column);
     if (filter) query = query.eq(filter.column, filter.value);
     const { data, error } = await query;
     if (error) throw error;

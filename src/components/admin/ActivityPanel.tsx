@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { operationMetrics } from "@/lib/operation-metrics";
 import { adminToken, messageFor, type Article } from "@/lib/admin";
 import {
   probeMcp,
@@ -26,6 +27,8 @@ export function ActivityPanel({
   edit: (article: Article) => void;
 }) {
   const [filter, setFilter] = useState("all");
+  const [days, setDays] = useState(7);
+  const metrics = operationMetrics(operations, days);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Operation | null>(null);
@@ -133,6 +136,56 @@ export function ActivityPanel({
           </div>
         ))}
       </div>
+      <section className={panel}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">Tool reliability & latency</h3>
+          <select
+            aria-label="Metrics period"
+            className={`${button} bg-surface`}
+            value={days}
+            onChange={(event) => setDays(Number(event.target.value))}
+          >
+            {[1, 7, 30].map((day) => (
+              <option key={day} value={day}>
+              Last {day} {day === 1 ? "day" : "days"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="mt-3 text-sm">
+          {error
+            ? "Metrics unavailable"
+            : `${metrics.calls} recorded calls · ${metrics.failed} failed · ${metrics.successRate ?? "—"}% success · Mean ${metrics.mean ?? "—"} ms · P95 ${metrics.p95 ?? "—"} ms`}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Last recorded call:{" "}
+          {metrics.last ? new Date(metrics.last).toLocaleString() : "None in this period"}. Latency
+          measures tool handling, including database work; the health check measures a round trip.
+        </p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr>
+                {["Tool", "Calls", "Failed", "Mean ms"].map((label) => (
+                  <th className="pb-2" key={label}>
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.tools.map((tool) => (
+                <tr className="border-t border-border" key={tool.tool}>
+                  <td className="py-2">{tool.tool}</td>
+                  <td>{tool.calls}</td>
+                  <td>{tool.failed}</td>
+                  <td>{tool.mean}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
       <section className={panel}>
         <div className="mb-4 flex flex-wrap gap-3">
           <input
@@ -305,6 +358,20 @@ export function ActivityPanel({
                 {new Date(item.created_at).toLocaleString()} · {item.source} ·{" "}
                 {item.status ?? "deleted"}
               </p>
+              <details className="mt-2 text-xs text-muted-foreground">
+                <summary>Actor & request details</summary>
+                <p className="mt-1">
+                  Actor:{" "}
+                  {item.actor_id ??
+                    (item.source === "mcp-public"
+                      ? "Public MCP tool (caller identity is not recorded)"
+                      : "Not recorded")}
+                </p>
+                <p className="mt-1 break-all">
+                  Article ID: {item.post_id} · Request ID: {item.request_id ?? "Manual change"} ·
+                  Previous status: {item.previous_status ?? "New article"}
+                </p>
+              </details>
             </li>
           ))}
         </ul>

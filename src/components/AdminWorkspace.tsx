@@ -32,6 +32,8 @@ import { ArticleReview } from "./admin/ArticleReview";
 import { SeoPanel } from "./admin/SeoPanel";
 import { MediaTools } from "./admin/MediaTools";
 import { DashboardInsights } from "./admin/DashboardInsights";
+import { ContentPanel } from "./admin/ContentPanel";
+import { SystemPanel } from "./admin/SystemPanel";
 import type { Operation, PublishingActivity } from "@/lib/admin-operations";
 
 const input = "mt-2 w-full rounded-lg border border-input bg-surface px-3 py-2.5 text-sm";
@@ -43,9 +45,11 @@ const tabs = [
   { name: "Overview", icon: LayoutDashboard },
   { name: "Posts", icon: FileText },
   { name: "MCP Activity", icon: Activity },
+  { name: "Content", icon: FileText },
   { name: "SEO", icon: SearchCheck },
   { name: "Categories", icon: Tags },
   { name: "Media", icon: Images },
+  { name: "System", icon: Settings2 },
   { name: "Settings", icon: Settings2 },
 ] as const;
 type Tab = (typeof tabs)[number]["name"] | "Editor";
@@ -454,6 +458,17 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                 error={operationsError}
                 refresh={refresh}
                 edit={edit}
+              />
+            )}
+            {tab === "Content" && <ContentPanel articles={articles} topics={topics} edit={edit} />}
+            {tab === "System" && (
+              <SystemPanel
+                articles={articles}
+                media={media}
+                topics={topics}
+                settings={settings}
+                operations={operations}
+                activity={activity}
               />
             )}
             {tab === "SEO" && <SeoPanel articles={articles} edit={edit} />}

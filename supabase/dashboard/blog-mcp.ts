@@ -67,7 +67,7 @@ async function getPost(database: SupabaseClient, id: string): Promise<Post> {
   return data as Post;
 }
 
-async function validate(database: SupabaseClient, post: Post) {
+async function validate(database: SupabaseClient, post: Post, controls?: McpControls) {
   const errors: string[] = [];
   const warnings: string[] = [];
   const parsed = fields.safeParse(Object.fromEntries(Object.keys(fields.shape).map(key => [key, post[key as keyof Post]])));
@@ -82,6 +82,8 @@ async function validate(database: SupabaseClient, post: Post) {
   if (post.description.length < 80) warnings.push('A more descriptive search summary may be useful.');
   if (post.cover_image_url && !post.cover_image_alt?.trim()) errors.push('Cover images need meaningful alt text.');
   if (!post.cover_image_url) warnings.push('Consider adding a relevant cover image.');
+  if (controls?.require_cover && !post.cover_image_url) errors.push('The administrator requires a featured image.');
+  if (controls?.require_description && post.description.trim().length < 80) errors.push('The administrator requires a description of at least 80 characters.');
   const imageUrls = new Set<string>();
   if (post.cover_image_url) imageUrls.add(post.cover_image_url);
   sanitizeHtml(post.body, { ...htmlOptions, transformTags: { img: (_tag, attributes) => { if (attributes.src) imageUrls.add(attributes.src); return htmlOptions.transformTags.img(_tag, attributes); } } });
@@ -104,9 +106,9 @@ async function write(database: SupabaseClient, tool: string, args: { request_id:
   return { ...data, url: data.post.status === 'published' ? `${SITE_URL}/blog/${data.post.slug}` : null };
 }
 
-export function createServer(database: SupabaseClient) {
+export function createServer(database: SupabaseClient, controls?: McpControls) {
   const server = new McpServer({
-    name: 'ai-insights-blog', version: '2.1.0',
+    name: 'ai-insights-blog', version: '3.0.0',
     schemaAdapter: schema => z.toJSONSchema(schema as z.ZodType),
   });
 
@@ -116,16 +118,18 @@ export function createServer(database: SupabaseClient) {
     handler: safeHandler(async () => {
       const { data: topics, error } = await database.from('categories').select('name').order('name');
       if (error) databaseError(error);
+      const { data: settings, error: settingsError } = await database.from('site_settings').select('*').single();
+      if (settingsError) databaseError(settingsError);
       return ({
-      name: 'AI Insights', url: SITE_URL, categories: (topics ?? []).map(topic => topic.name),
+      name: settings.name, default_author: settings.default_author, url: SITE_URL, categories: (topics ?? []).map(topic => topic.name), controls,
       limits: { title: 200, description: 160, author: 200, body: 200000 },
       article_format: 'HTML paragraphs, headings h2-h4, lists, links, blockquotes, strong/em, code blocks, img, figure and figcaption. Every image must use a returned blog-images URL and meaningful alt text. No scripts, styles or embeds.',
-      images: { bucket: IMAGE_BUCKET, public_before_publication: true, max_bytes: MAX_IMAGE_BYTES, formats: ['PNG', 'JPEG', 'WebP'], import_hosts: IMPORT_HOSTS, workflow: 'Use upload_image or import_image_url, then set cover_image_url/cover_image_alt through create_draft or update_draft, or embed img in the body. Provide source, credit, and reuse permission. No image generation tool is provided.' },
+      images: { bucket: IMAGE_BUCKET, public_before_publication: true, max_bytes: controls?.max_image_bytes ?? MAX_IMAGE_BYTES, formats: controls?.allowed_formats ?? ['png', 'jpg', 'webp'], import_hosts: IMPORT_HOSTS, workflow: 'Use upload_image or import_image_url, then set cover_image_url/cover_image_alt through create_draft or update_draft, or embed img in the body. Provide source, credit, and reuse permission. No image generation tool is provided.' },
       rules: ['Create articles as drafts.', 'Get the current revision before editing.', 'Publish or unpublish only after the human explicitly requests that action.', 'Use a new request_id for each change; reuse it for exact retries.', 'A public endpoint cannot verify who gave approval.'],
     }); }),
   });
 
-  const images = createImageTools(database);
+  const images = createImageTools(database, controls);
   server.tool('upload_image', {
     description: 'Upload PNG/JPEG/WebP bytes as raw base64 to the public blog-images bucket. Maximum 4 MiB. Requires source, credit, permission note and alt text. Content-addressed files make exact retries safe. This tool does not generate images.',
     inputSchema: z.object({ ...imageDetails, base64: z.string().min(4).max(Math.ceil(MAX_IMAGE_BYTES / 3) * 4) }).strict(),
@@ -164,7 +168,7 @@ export function createServer(database: SupabaseClient) {
 
   server.tool('create_draft', {
     description: 'Save a new unpublished article. Cannot publish. Retry only with the same request_id and identical fields; the database prevents duplicate retries.',
-    inputSchema: fields.extend({ author: fields.shape.author.default('AI Insights'), date: fields.shape.date.optional(), featured: z.boolean().default(false), request_id: requestId }).strict(),
+    inputSchema: fields.extend({ author: fields.shape.author.optional(), date: fields.shape.date.optional(), featured: z.boolean().default(false), request_id: requestId }).strict(),
     handler: safeHandler(async args => {
       const { request_id, ...article } = args;
       const { body, reading_minutes, markup_removed } = safeContent(article.body);
@@ -191,7 +195,7 @@ export function createServer(database: SupabaseClient) {
   server.tool('validate_draft', {
     description: 'Check a saved draft for field limits, readable/safe HTML, slug collisions, and publication readiness. Does not publish.',
     inputSchema: z.object({ post_id: postId }).strict(),
-    handler: safeHandler(async args => validate(database, await getPost(database, args.post_id))),
+    handler: safeHandler(async args => validate(database, await getPost(database, args.post_id), controls)),
   });
 
   server.tool('publish_post', {
@@ -202,7 +206,7 @@ export function createServer(database: SupabaseClient) {
       // The database checks exact retries before current state. A completed publish
       // may already have changed status/revision, so let it replay or reject stale input.
       if (post.revision !== args.expected_revision || post.status !== 'draft') return write(database, 'publish_post', args);
-      const checked = await validate(database, post);
+      const checked = await validate(database, post, controls);
       if (!checked.valid) throw new Error(`Draft is not ready: ${checked.errors.join('; ')}`);
       return write(database, 'publish_post', args);
     }),
@@ -222,10 +226,11 @@ export function createHandler(database: SupabaseClient) {
     let toolCall: { name: string; arguments: unknown } | undefined;
     const path = new URL(request.url).pathname.replace(/\/$/, '');
     if (path.endsWith('/health')) {
-      const [categories, operations] = await Promise.all([
+      const [categories, operations, controls] = await Promise.all([
         database.from('categories').select('name').limit(1), database.from('mcp_operations').select('id').limit(1),
+        database.from('mcp_controls').select('paused').single(),
       ]);
-      return Response.json({ name: 'ai-insights-blog', version: '2.1.0', authentication: 'none', activity_tracking: !operations.error, database: categories.error ? 'unavailable' : 'available' }, { status: categories.error ? 503 : 200 });
+      return Response.json({ name: 'ai-insights-blog', version: '3.0.0', authentication: 'none', activity_tracking: !operations.error, controls_available: !controls.error, paused: controls.data?.paused ?? null, database: categories.error ? 'unavailable' : 'available' }, { status: categories.error || controls.error ? 503 : 200 });
     }
     if (!path.endsWith('/blog-mcp') && !path.endsWith('/blog-mcp/mcp')) return new Response('Not found', { status: 404 });
     const origin = request.headers.get('origin');
@@ -259,12 +264,22 @@ export function createHandler(database: SupabaseClient) {
       for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.length; }
       try {
         const parsed = JSON.parse(new TextDecoder().decode(body));
+        if (Array.isArray(parsed)) return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Batch requests are not supported. Send one tool call per request.' } }, { status: 400, headers: cors });
         if (parsed.method === 'tools/call' && typeof parsed.params?.name === 'string') toolCall = parsed.params;
       } catch { /* Transport returns the protocol's parse error. */ }
       request = new Request(request.url, { method: request.method, headers: request.headers, body });
     }
     // No in-memory sessions: any instance can handle the next request or retry.
-    const response = await new StreamableHttpTransport({ allowedOrigins: origins }).bind(createServer(database))(request);
+    let controls: McpControls | undefined;
+    let blocked: string | undefined;
+    if (toolCall) {
+      try { const decision = await admit(database, toolCall.name); controls = decision.controls; blocked = decision.error; }
+      catch { blocked = 'MCP controls did not respond. Retry later.'; }
+    }
+    const requestId = toolCall ? (await request.clone().json()).id : undefined;
+    const response = blocked
+      ? Response.json({ jsonrpc: '2.0', id: requestId ?? null, result: { isError: true, content: [{ type: 'text', text: blocked }] } })
+      : await new StreamableHttpTransport({ allowedOrigins: origins }).bind(createServer(database, controls))(request);
     if (toolCall) await recordOperation(database, toolCall.name, toolCall.arguments, response, started);
     const headers = new Headers(response.headers);
     for (const [name, value] of Object.entries(cors)) headers.set(name, value);
@@ -298,6 +313,18 @@ async function recordOperation(database: SupabaseClient, tool: string, args: unk
     }).abortSignal(AbortSignal.timeout(5000));
     if (logError) console.error('MCP operation logging failed:', logError.code);
   } catch { console.error('MCP operation could not be logged.'); }
+}
+
+
+type McpControls = {
+  paused: boolean; disabled_tools: string[]; calls_per_minute: number;
+  max_image_bytes: number; allowed_formats: string[];
+  require_cover: boolean; require_description: boolean;
+};
+async function admit(database: SupabaseClient, tool: string): Promise<{ controls?: McpControls; error?: string }> {
+  const { data, error } = await database.rpc('mcp_admit', { p_tool: tool }).abortSignal(AbortSignal.timeout(5000));
+  if (error || !data) return { error: 'MCP controls are unavailable. Apply the Top admin migration before using tools.' };
+  return data;
 }
 
 
@@ -356,16 +383,16 @@ function imageDimensions(bytes: Uint8Array): { width: number; height: number } |
   return width > 0 && height > 0 && width <= 100000 && height <= 100000 ? { width, height } : {};
 }
 
-async function readLimitedImage(response: Response) {
+async function readLimitedImage(response: Response, maxBytes = MAX_IMAGE_BYTES) {
   if (!response.ok) throw new Error(`The image host returned HTTP ${response.status}.`);
-  if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) throw new Error('Image exceeds the 4 MiB limit.');
+  if (Number(response.headers.get('content-length')) > maxBytes) throw new Error('Image exceeds the configured size limit.');
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Image response was empty.');
   const chunks: Uint8Array[] = []; let total = 0;
   for (;;) {
     const { value, done } = await reader.read(); if (done) break;
     total += value.length;
-    if (total > MAX_IMAGE_BYTES) { await reader.cancel(); throw new Error('Image exceeds the 4 MiB limit.'); }
+    if (total > maxBytes) { await reader.cancel(); throw new Error('Image exceeds the configured size limit.'); }
     chunks.push(value);
   }
   const bytes = new Uint8Array(total); let offset = 0;
@@ -382,10 +409,12 @@ function checkImportUrl(value: string) {
 }
 
 type Details = { alt: string; source_url: string; credit: string; license_note: string };
-function createImageTools(database: SupabaseClient) {
+function createImageTools(database: SupabaseClient, controls?: { max_image_bytes: number; allowed_formats: string[] }) {
   async function save(bytes: Uint8Array, details: Details) {
     if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) throw new Error('Image must be between 1 byte and 4 MiB.');
     const { mime, ext } = imageType(bytes);
+    if (bytes.length > (controls?.max_image_bytes ?? MAX_IMAGE_BYTES)) throw new Error('Image exceeds the configured size limit.');
+    if (controls && !controls.allowed_formats.includes(ext)) throw new Error('This image format is disabled by an administrator.');
     const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
     const sha = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
     const path = `articles/${sha}.${ext}`;
@@ -414,7 +443,7 @@ function createImageTools(database: SupabaseClient) {
       const url = checkImportUrl(args.image_url);
       // Do not follow redirects to arbitrary hosts or private-network addresses.
       const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000) });
-      return save(await readLimitedImage(response), args);
+      return save(await readLimitedImage(response, controls?.max_image_bytes), args);
     },
     list: async (args: { page: number; page_size: number }) => {
       const { data, error, count } = await database.from('blog_images').select('*', { count: 'exact' }).order('created_at', { ascending: false }).order('path', { ascending: false }).range((args.page - 1) * args.page_size, args.page * args.page_size - 1);

@@ -56,16 +56,16 @@ export function imageDimensions(bytes: Uint8Array): { width: number; height: num
   return width > 0 && height > 0 && width <= 100000 && height <= 100000 ? { width, height } : {};
 }
 
-export async function readLimitedImage(response: Response) {
+export async function readLimitedImage(response: Response, maxBytes = MAX_IMAGE_BYTES) {
   if (!response.ok) throw new Error(`The image host returned HTTP ${response.status}.`);
-  if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) throw new Error('Image exceeds the 4 MiB limit.');
+  if (Number(response.headers.get('content-length')) > maxBytes) throw new Error('Image exceeds the configured size limit.');
   const reader = response.body?.getReader();
   if (!reader) throw new Error('Image response was empty.');
   const chunks: Uint8Array[] = []; let total = 0;
   for (;;) {
     const { value, done } = await reader.read(); if (done) break;
     total += value.length;
-    if (total > MAX_IMAGE_BYTES) { await reader.cancel(); throw new Error('Image exceeds the 4 MiB limit.'); }
+    if (total > maxBytes) { await reader.cancel(); throw new Error('Image exceeds the configured size limit.'); }
     chunks.push(value);
   }
   const bytes = new Uint8Array(total); let offset = 0;
@@ -82,10 +82,12 @@ export function checkImportUrl(value: string) {
 }
 
 type Details = { alt: string; source_url: string; credit: string; license_note: string };
-export function createImageTools(database: SupabaseClient) {
+export function createImageTools(database: SupabaseClient, controls?: { max_image_bytes: number; allowed_formats: string[] }) {
   async function save(bytes: Uint8Array, details: Details) {
     if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) throw new Error('Image must be between 1 byte and 4 MiB.');
     const { mime, ext } = imageType(bytes);
+    if (bytes.length > (controls?.max_image_bytes ?? MAX_IMAGE_BYTES)) throw new Error('Image exceeds the configured size limit.');
+    if (controls && !controls.allowed_formats.includes(ext)) throw new Error('This image format is disabled by an administrator.');
     const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
     const sha = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
     const path = `articles/${sha}.${ext}`;
@@ -114,7 +116,7 @@ export function createImageTools(database: SupabaseClient) {
       const url = checkImportUrl(args.image_url);
       // Do not follow redirects to arbitrary hosts or private-network addresses.
       const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000) });
-      return save(await readLimitedImage(response), args);
+      return save(await readLimitedImage(response, controls?.max_image_bytes), args);
     },
     list: async (args: { page: number; page_size: number }) => {
       const { data, error, count } = await database.from('blog_images').select('*', { count: 'exact' }).order('created_at', { ascending: false }).order('path', { ascending: false }).range((args.page - 1) * args.page_size, args.page * args.page_size - 1);

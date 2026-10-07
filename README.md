@@ -108,8 +108,9 @@ Deleted posts retain their snapshots for auditing.
 
 Regenerate `supabase/dashboard/blog-mcp.ts` with `node scripts/prepare-mcp-dashboard.mjs`
 and deploy it to the existing `blog-mcp` function. Keep its existing authentication
-configuration. `/health` reports version `2.1.0`, database availability, and whether
-operation logging is configured. Success/failure history starts with this deployment;
+configuration. The Good update introduced database availability and operation tracking
+in `/health`; the current version is `3.0.0` and also requires the Top migration below.
+Success/failure history starts with the logging deployment;
 the earlier database publishing audit remains visible. Logs redact image base64 and
 credential fields. Failed supported operations retry the exact original arguments,
 UUID and revision after admin confirmation; stale revisions still fail. Image uploads
@@ -122,6 +123,50 @@ review and save; it cannot silently republish an old version. WebP optimization 
 a smaller copy while keeping the source file and existing article references.
 SEO reports local metadata/image/internal-link issues, with explicit deployed-site
 checks for canonical URLs, BlogPosting data and sitemap status.
+
+## Top admin (without Google integrations)
+
+The Top update adds Content and System sections. MCP Activity reports 1/7/30-day
+success rates, failures by tool, mean and P95 handling times, and last recorded call.
+Revision review compares saved metadata and HTML with the current article and shows
+source, actor, creation and modification times. Restore remains a reviewed draft
+save guarded by the current revision.
+
+Run `supabase/migrations/20261007060501_top_admin.sql` once **in AI Insights project
+`gutvbukqlqutjwlbmfpr`**, after the Basic and Good migrations. Then replace the entire
+existing `blog-mcp` function with `supabase/dashboard/blog-mcp.ts` and deploy it. The
+website and Edge Function are deployed separately. `/health` should report `3.0.0`
+and `controls_available: true`. Apply SQL before deploying the new MCP: tools fail
+closed while controls are unavailable; the previous function remains unchanged until
+deployment. There are no Search Console or AdSense connections in this update.
+
+System provides a global pause, individual tool switches, shared per-minute quota,
+MCP image size/format limits, and optional cover/description publication requirements.
+Limits live in Postgres and work across function instances. Control updates require
+designated-admin access, use revision checks, and write an immutable audit. Existing
+calls may finish after a change. These controls govern MCP tools; emergency admin
+corrections remain available. Confirmation, unique slugs, idempotency and revision
+checks remain mandatory. Default author now comes from site settings at draft creation
+inside the database transaction, preserving exact retry semantics.
+
+Content finds stale articles, missing images, possible title/topic overlaps, and
+underfilled categories. Requested link/image scans accept at most five articles and
+40 distinct URLs per batch, with four concurrent five-second HEAD requests. Only the
+site, its fixed public image path and explicitly listed trusted source hosts are
+fetched. Redirects, unknown hosts, blocked responses and timeouts need manual review;
+only 404/410 responses are classified as broken. Scan and health history are saved
+with admin-only RLS. No background scans or uptime monitor are scheduled.
+
+System exports posts JSON or a content archive with revisions, publication/MCP logs,
+checks, settings, categories, media metadata and controls. Exports include unpublished
+content and should be stored securely. They are application exports, not database
+backups: image bytes, authentication records and private idempotency/quota tables are
+not included. Database recovery and project-wide storage/API usage are handled in
+Supabase; direct dashboard links are provided. Use revision restoration for article
+corrections. Registered image byte totals are not project-wide storage usage.
+
+Verification: `npm run check`, `npm run build`, `node scripts/smoke-ssr.mjs`, and
+`npm test` in `supabase/functions/blog-mcp` (real migrations tested with PGlite).
 
 ## Blog MCP
 

@@ -1,4 +1,4 @@
-# AI Insights blog MCP v2
+# AI Insights blog MCP v3
 
 This is a public, unauthenticated Streamable HTTP MCP endpoint, as requested.
 Claude and Supabase accounts do not need to match. Anyone who knows the endpoint
@@ -21,7 +21,8 @@ policies still apply to website clients.
    / Function configuration. The function intentionally has no OAuth or token check.
 6. Supabase injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in its Edge runtime.
    No credentials need to be pasted into the function, Claude, or Cloudflare.
-7. Visit the endpoint's `/health` URL; version should be `2.1.0` with the Good admin update.
+7. Apply the Basic, Good and Top admin migrations in order before deploying this
+   version. Visit `/health`; version should be `3.0.0` and `controls_available: true`.
 8. Keep the existing Claude connector and endpoint below. Refresh/reconnect if it
    still shows only eight tools; v2 exposes eleven tools. Authentication stays None.
 9. Deploy the matching website build for cover images, inline images, captions,
@@ -32,6 +33,20 @@ Endpoint: `https://gutvbukqlqutjwlbmfpr.supabase.co/functions/v1/blog-mcp`
 
 Regenerate the dashboard file after source changes with
 `node scripts/prepare-mcp-dashboard.mjs` from the repository root.
+
+## Top admin controls
+
+Run `supabase/migrations/20261007060501_top_admin.sql` after the Basic and Good SQL.
+The admin System section changes controls with designated-admin access and an
+immutable audit: pause, tool switches, global quota, image size/formats and optional
+cover/description requirements. Quota admission is serialized in Postgres, shared
+across Edge instances. Missing controls or quota failures block tool calls. Batch
+JSON-RPC requests are rejected so each tool call is admitted and logged separately.
+Initialization and tool discovery remain available while paused. Requests in progress
+may finish after controls change. The default author is resolved from site settings
+inside the idempotent create transaction; a retry returns the original saved author.
+Human confirmation remains mandatory for publish/unpublish. Limits govern MCP;
+emergency website admin corrections remain available.
 
 ## Tools and workflow
 

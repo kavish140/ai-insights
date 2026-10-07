@@ -4,6 +4,8 @@ import { publicConfiguration } from "./supabase.server";
 import { cleanBody } from "./supabase.server";
 import { SITE } from "./posts";
 import sanitizeHtml from "sanitize-html";
+import type { ContentScan } from "./content-health";
+import { inspectContent } from "./content-scanner.server";
 
 const endpoint = "https://gutvbukqlqutjwlbmfpr.supabase.co/functions/v1/blog-mcp";
 async function adminClient(token: string) {
@@ -20,7 +22,7 @@ async function adminClient(token: string) {
 }
 
 export async function probe(token: string) {
-  await adminClient(token);
+  const client = await adminClient(token);
   const started = Date.now();
   try {
     const response = await fetch(`${endpoint}/health`, { signal: AbortSignal.timeout(10000) });
@@ -28,27 +30,72 @@ export async function probe(token: string) {
       version?: string;
       database?: string;
       activity_tracking?: boolean;
+      controls_available?: boolean;
+      paused?: boolean | null;
     };
-    return {
+    return saveHealth(client, {
       online: response.ok,
       latency: Date.now() - started,
       version: result.version ?? "unknown",
       database: result.database ?? "not reported",
       tracking: !!result.activity_tracking,
+      controls: !!result.controls_available,
+      paused: result.paused ?? null,
       checkedAt: new Date().toISOString(),
       error: response.ok ? "" : `Health returned HTTP ${response.status}`,
-    };
+    });
   } catch {
-    return {
+    return saveHealth(client, {
       online: false,
       latency: Date.now() - started,
       version: "unknown",
       database: "unknown",
       tracking: false,
+      controls: false,
+      paused: null,
       checkedAt: new Date().toISOString(),
       error: "The MCP health endpoint did not respond.",
-    };
+    });
   }
+}
+
+async function saveHealth(
+  client: Awaited<ReturnType<typeof adminClient>>,
+  result: {
+    online: boolean;
+    latency: number;
+    version: string;
+    database: string;
+    tracking: boolean;
+    controls: boolean;
+    paused: boolean | null;
+    checkedAt: string;
+    error: string;
+  },
+) {
+  const { error } = await client.from("admin_checks").insert({ kind: "health", result });
+  return { ...result, saved: !error };
+}
+
+export async function scan(token: string, postIds: string[]): Promise<ContentScan> {
+  const client = await adminClient(token);
+  const { error: checksError } = await client.from("admin_checks").select("id").limit(1);
+  if (checksError)
+    throw new Error("Apply the Top admin migration before running saved content scans.");
+  const { data: posts, error } = await client
+    .from("posts")
+    .select("id,title,body,cover_image_url")
+    .in("id", postIds);
+  if (error) throw new Error("Could not load articles for the scan.");
+  const result = await inspectContent(posts ?? [], SITE.url);
+  const { error: saveError } = await client
+    .from("admin_checks")
+    .insert({ kind: "content", result });
+  if (saveError)
+    throw new Error(
+      "Scan completed but could not be saved. Apply the Top admin migration and retry.",
+    );
+  return result;
 }
 
 export async function retry(token: string, id: string) {

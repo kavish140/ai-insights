@@ -8,6 +8,10 @@ import { createHandler } from './server.ts';
 import { checkImportUrl, readLimitedImage, MAX_IMAGE_BYTES, imageDimensions } from './images.ts';
 import { activityArguments } from './activity.ts';
 import { seoIssues } from '../../../src/lib/seo-health.ts';
+import { checkableUrl, contentFindings } from '../../../src/lib/content-health.ts';
+import { operationMetrics } from '../../../src/lib/operation-metrics.ts';
+import { inspectContent } from '../../../src/lib/content-scanner.server.ts';
+import type { Operation } from '../../../src/lib/admin-operations.ts';
 
 const db = new PGlite();
 const storedImages = new Map<string, Uint8Array>();
@@ -35,6 +39,7 @@ before(async () => {
   await db.exec(await readFile(new URL('20261005170811_mcp_images_v2.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261007043618_basic_admin.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261007051335_good_admin.sql', migrations), 'utf8'));
+  await db.exec(await readFile(new URL('20261007060501_top_admin.sql', migrations), 'utf8'));
   await db.exec('set role service_role');
 });
 after(async () => { await db.close(); });
@@ -47,6 +52,19 @@ const client = createClient('http://database.invalid', 'test-server-credential',
     const request = new Request(input, init);
       const url = new URL(request.url);
     try {
+      if (url.pathname.endsWith('/rpc/mcp_admit')) {
+        const args = await request.json();
+        const { rows } = await db.query<{result: unknown}>('select public.mcp_admit($1) as result',[args.p_tool]);
+        return Response.json(rows[0].result);
+      }
+      if (url.pathname.endsWith('/mcp_controls')) {
+        const { rows } = await db.query('select * from public.mcp_controls');
+        return Response.json(rows[0]);
+      }
+      if (url.pathname.endsWith('/site_settings')) {
+        const { rows } = await db.query('select * from public.site_settings');
+        return Response.json(rows[0]);
+      }
       if (url.pathname.endsWith('/mcp_operations')) {
         if (request.method === 'POST') {
           const record = await request.json();
@@ -266,7 +284,7 @@ test('image import rejects unsafe destinations and oversized streamed downloads'
     assert.throws(() => checkImportUrl(url), /HTTPS/);
   }
   assert.equal(checkImportUrl('https://images.unsplash.com/photo-123?w=1200').hostname, 'images.unsplash.com');
-  await assert.rejects(readLimitedImage(new Response(new Uint8Array(MAX_IMAGE_BYTES + 1))), /4 MiB/);
+  await assert.rejects(readLimitedImage(new Response(new Uint8Array(MAX_IMAGE_BYTES + 1))), /size limit/);
   await assert.rejects(readLimitedImage(new Response(null, { status: 302 })), /HTTP 302/);
 });
 
@@ -411,4 +429,133 @@ test('SEO catches unpublished internal links, duplicate slugs, missing descripti
   assert.equal(issues.length,6);
   const healthy = {...article,title:'Healthy title',description:'A useful description',cover_image_alt:'Meaningful alt'};
   assert.deepEqual(seoIssues(healthy,[healthy],{images:[],links:[`/blog/${healthy.slug}`]},'2026-10-07'),[]);
+});
+
+test('Top controls and saved checks are admin-only with immutable control audit', async () => {
+  await db.exec('reset role');
+  const adminId = randomUUID();
+  await db.query('insert into auth.users(id) values ($1)',[adminId]);
+  await db.query('insert into public.admin_users(user_id) values ($1)',[adminId]);
+  try {
+    await db.exec('set role anon');
+    for (const table of ['mcp_controls','control_activity','admin_checks']) await assert.rejects(db.query(`select * from public.${table}`),/permission denied/);
+    await assert.rejects(db.query("select public.mcp_admit('get_post')"),/permission denied/);
+    await db.exec('set role authenticated');
+    assert.equal((await db.query('select * from public.mcp_controls')).rows.length,0);
+    assert.equal((await db.query('update public.mcp_controls set paused=true returning id')).rows.length,0);
+    await assert.rejects(db.query("insert into public.admin_checks(kind,result) values ('health','{}')"),/row-level security/);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[adminId]);
+    const { rows: before } = await db.query<{revision: number}>('select revision from public.mcp_controls');
+    await db.query('update public.mcp_controls set paused=true where revision=$1',[before[0].revision]);
+    assert.equal((await db.query('update public.mcp_controls set paused=false where revision=$1 returning id',[before[0].revision])).rows.length,0);
+    const { rows: audit } = await db.query<{actor_id: string;after_value: {revision: number}}>('select * from public.control_activity order by id desc limit 1');
+    assert.equal(audit[0].actor_id,adminId);
+    assert.equal(audit[0].after_value.revision,before[0].revision+1);
+    await assert.rejects(db.query('delete from public.control_activity'),/permission denied/);
+    await assert.rejects(db.query("insert into public.control_activity(before_value,after_value) values ('{}','{}')"),/permission denied/);
+    await db.query("insert into public.admin_checks(kind,result) values ('health','{}')");
+    await assert.rejects(db.query('update public.admin_checks set result=$1',['{}']),/permission denied/);
+    await assert.rejects(db.query("insert into public.admin_checks(kind,result,actor_id) values ('health','{}',$1)",[randomUUID()]),/row-level security/);
+  } finally {
+    await db.exec('reset role'); await db.query('update public.mcp_controls set paused=false');
+    await db.query("select set_config('request.jwt.claim.sub','',false)"); await db.exec('set role service_role');
+  }
+});
+
+test('MCP pause, tool switches, missing controls and batches cannot bypass admission', async () => {
+  try {
+    await db.exec('reset role'); await db.query('update public.mcp_controls set paused=true'); await db.exec('set role service_role');
+    assert.match((await call('create_draft',draft())).error,/paused/);
+    await db.exec('reset role'); await db.query("update public.mcp_controls set paused=false,disabled_tools=array['create_draft']"); await db.exec('set role service_role');
+    assert.match((await call('create_draft',draft())).error,/disabled/);
+    assert.ok((await call('list_posts',{})).posts);
+    const batch = await handler(new Request('https://example.com/blog-mcp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify([{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'create_draft',arguments:draft()}}])}));
+    assert.equal(batch.status,400);
+    await db.exec('reset role'); await db.query('alter table public.mcp_controls rename to controls_temporarily_missing'); await db.exec('set role service_role');
+    assert.match((await call('create_draft',draft())).error,/unavailable/);
+    await db.exec('reset role'); await db.query('alter table public.controls_temporarily_missing rename to mcp_controls');
+  } finally {
+    await db.exec('reset role'); await db.query("update public.mcp_controls set paused=false,disabled_tools='{}'"); await db.exec('set role service_role');
+  }
+});
+
+test('shared quota is atomic across callers and resets after its window', async () => {
+  try {
+    await db.exec('reset role');
+    await db.query('update public.mcp_controls set calls_per_minute=2');
+    await db.query('update private.mcp_quota set calls=0,window_start=now()');
+    await db.exec('set role service_role');
+    const results = await Promise.all(Array.from({length:5}, () => db.query<{result:{error?: string}}>("select public.mcp_admit('list_posts') as result")));
+    assert.equal(results.filter(result => !result.rows[0].result.error).length,2);
+    assert.match((await call('list_posts',{})).error,/limit/);
+    await db.exec('reset role'); await db.query("update private.mcp_quota set window_start=now()-interval '61 seconds'"); await db.exec('set role service_role');
+    assert.ok((await call('list_posts',{})).posts);
+  } finally {
+    await db.exec('reset role'); await db.query('update public.mcp_controls set calls_per_minute=120'); await db.query('update private.mcp_quota set calls=0,window_start=now()'); await db.exec('set role service_role');
+  }
+});
+
+test('configured publication and image safeguards enforce limits and dynamic default author', async () => {
+  try {
+    await db.exec('reset role');
+    await db.query("update public.mcp_controls set require_cover=true,require_description=true,allowed_formats=array['webp'],max_image_bytes=1024");
+    await db.query("update public.site_settings set default_author='Configured author'");
+    await db.exec('set role service_role');
+    const createArgs = draft();
+    const created = await call('create_draft',createArgs);
+    assert.equal(created.post.author,'Configured author');
+    await db.exec('reset role'); await db.query("update public.site_settings set default_author='Changed author'"); await db.exec('set role service_role');
+    const replayed = await call('create_draft',createArgs);
+    assert.equal(replayed.replayed,true);
+    assert.equal(replayed.post.author,'Configured author');
+    const validation = await call('validate_draft',{post_id:created.post.id});
+    assert.equal(validation.valid,false);
+    assert.match(validation.errors.join(' '),/featured image/);
+    assert.match(validation.errors.join(' '),/80 characters/);
+    assert.match((await call('publish_post',{post_id:created.post.id,expected_revision:1,request_id:randomUUID(),confirmed:true})).error,/not ready/);
+    const details={alt:'Pixel',source_url:'https://example.com/source',credit:'Creator',license_note:'Permitted reuse'};
+    const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDYQAAAAASUVORK5CYII=';
+    assert.match((await call('upload_image',{...details,base64:png})).error,/format is disabled/);
+    const oversized=Buffer.alloc(1100); Buffer.from(png,'base64').copy(oversized);
+    assert.match((await call('upload_image',{...details,base64:oversized.toString('base64')})).error,/size limit/);
+    assert.equal((await call('get_site_context',{})).default_author,'Changed author');
+  } finally {
+    await db.exec('reset role'); await db.query("update public.mcp_controls set require_cover=false,require_description=false,allowed_formats=array['png','jpg','webp'],max_image_bytes=4194304"); await db.query("update public.site_settings set default_author='AI Insights'"); await db.exec('set role service_role');
+  }
+});
+
+test('content checks restrict fetch destinations and identify refresh candidates and topic overlap', () => {
+  const site='https://ai-insights.sitenova.dev';
+  assert.ok(checkableUrl('/blog/article',site));
+  assert.ok(checkableUrl('https://openai.com/research',site));
+  for (const value of ['http://openai.com/','https://127.0.0.1/','https://localhost/','https://openai.com.evil.test/','https://openai.com:8080/','https://user:password@openai.com/','javascript:alert(1)','https://gutvbukqlqutjwlbmfpr.supabase.co/rest/v1/posts']) assert.equal(checkableUrl(value,site),null,value);
+  const article={...draft(),id:randomUUID(),title:'Practical automation guide',author:'AI Insights',date:'2025-01-01',updated_at:'2025-01-01',status:'draft' as const,featured:false,cover_image_url:'',cover_image_alt:''};
+  const findings=contentFindings([article,{...article,id:randomUUID(),title:'Practical automation guide today'}],180,Date.parse('2026-10-07'));
+  assert.ok(findings[0].issues.some(value => value.includes('180+')));
+  assert.ok(findings[0].issues.some(value => value.includes('overlap')));
+});
+
+test('reliability metrics use period boundaries and percentile latency', () => {
+  const now=Date.parse('2026-10-07T12:00:00Z');
+  const calls=[100,200,300,400,500].map((duration,index) => ({id:String(index),tool:index<3?'create_draft':'publish_post',outcome:index===0?'failed':'success',duration_ms:duration,created_at:new Date(now-index*86400000).toISOString()} as Operation));
+  const stats=operationMetrics(calls,2,now);
+  assert.equal(stats.calls,3); assert.equal(stats.failed,1); assert.equal(stats.successRate,67); assert.equal(stats.mean,200); assert.equal(stats.p95,300); assert.equal(stats.tools[0].calls,3);
+  assert.equal(operationMetrics([],7,now).successRate,null);
+});
+
+test('content scanner parses saved HTML, deduplicates URLs, caps requests and distinguishes failures', async () => {
+  const fetched: string[] = [];
+  const fakeFetch: typeof fetch = async (input,init) => {
+    const url=String(input); fetched.push(url);
+    assert.equal(init?.method,'HEAD'); assert.equal(init?.redirect,'manual'); assert.ok(init?.signal);
+    if (url.endsWith('/timeout')) throw new Error('Network unavailable');
+    return new Response(null,{status:url.endsWith('/missing') ? 404 : url.endsWith('/redirect') ? 302 : url.endsWith('/blocked') ? 403 : 200});
+  };
+  const html='<a href="/missing">Missing</a><a href="/missing">Duplicate</a><a href="https://openai.com/redirect">Redirect</a><a href="https://openai.com/blocked">Blocked</a><a href="https://openai.com/timeout">Timeout</a><a href="https://evil.example/">Manual</a><a href="#anchor">Anchor</a><a href="mailto:test@example.com">Email</a>';
+  const result=await inspectContent([{id:randomUUID(),title:'Scan test',body:html,cover_image_url:''}],'https://ai-insights.sitenova.dev',fakeFetch);
+  assert.deepEqual(result.articles[0].links.map(link => link.outcome),['broken','review','review','unreachable','review']);
+  assert.equal(fetched.length,4); assert.ok(!fetched.some(url => url.includes('evil.example')));
+  const many=Array.from({length:50},(_,i) => `<a href="/page-${i}">Link</a>`).join('');
+  const capped=await inspectContent([{id:randomUUID(),title:'Long article',body:many,cover_image_url:''}],'https://ai-insights.sitenova.dev',fakeFetch);
+  assert.equal(capped.articles[0].links.length,40); assert.equal(capped.articles[0].truncated,true);
 });
