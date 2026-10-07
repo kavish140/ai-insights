@@ -30,6 +30,7 @@ import {
 import { formatDate } from "@/lib/posts";
 import { ActivityPanel } from "./admin/ActivityPanel";
 import { ArticleReview } from "./admin/ArticleReview";
+import { ReadersPanel } from "./admin/ReadersPanel";
 import { SeoPanel } from "./admin/SeoPanel";
 import { MediaTools } from "./admin/MediaTools";
 import { DashboardInsights } from "./admin/DashboardInsights";
@@ -51,6 +52,7 @@ const tabs = [
   { name: "MCP Activity", icon: Activity },
   { name: "Content", icon: FileText },
   { name: "SEO", icon: SearchCheck },
+  { name: "Readers", icon: Activity },
   { name: "Categories", icon: Tags },
   { name: "Media", icon: Images },
   { name: "System", icon: Settings2 },
@@ -493,6 +495,7 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                 activity={activity}
               />
             )}
+            {tab === "Readers" && <ReadersPanel />}
             {tab === "SEO" && <SeoPanel articles={articles} edit={edit} />}
             {tab === "Posts" && (
               <section className={panel}>
@@ -676,6 +679,34 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                       <option value="draft">Draft</option>
                       <option value="published">Published</option>
                     </select>
+                  </Field>
+                </div>
+                <div className="grid gap-5 md:grid-cols-2">
+                  <Field label="Topic tags (comma-separated)">
+                    <input
+                      className={input}
+                      value={(draft.tags ?? []).join(",")}
+                      placeholder="ai agents, email, workflows"
+                      maxLength={600}
+                      onChange={(e) => setDraft({ ...draft, tags: e.target.value.split(",") })}
+                    />
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Up to 12 tags, 40 characters each. Use consistent topic names.
+                    </span>
+                  </Field>
+                  <Field label="Intended readers (comma-separated)">
+                    <input
+                      className={input}
+                      value={(draft.audience_tags ?? []).join(",")}
+                      placeholder="beginners, developers, business owners"
+                      maxLength={600}
+                      onChange={(e) =>
+                        setDraft({ ...draft, audience_tags: e.target.value.split(",") })
+                      }
+                    />
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Who will benefit from this article? Up to 12 audience tags.
+                    </span>
                   </Field>
                 </div>
                 <Field label="Search summary">

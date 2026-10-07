@@ -44,6 +44,16 @@ export function PostCard({ post, size = "default" }: { post: Post; size?: "defau
             {post.description}
           </p>
 
+          {!!post.tags?.length && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {post.tags.slice(0, 3).join(" · ")}
+            </p>
+          )}
+          {!!post.audience_tags?.length && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              For {post.audience_tags.slice(0, 3).join(", ")}
+            </p>
+          )}
           <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
             Read article
             <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">

@@ -9,6 +9,9 @@ const article = {
   title: "SSR test article",
   description: "An article rendered by the server.",
   category: "Automation",
+  tags: ["workflows"],
+  audience_tags: ["beginners"],
+  view_count: 42,
   date: "2026-10-05",
   updated_at: "2026-10-06T00:00:00Z",
   reading_minutes: 2,
@@ -69,7 +72,12 @@ const database = createServer((request, response) => {
     );
     return;
   }
-  if (url.pathname !== "/rest/v1/posts") {
+  if (url.pathname === "/rest/v1/rpc/related_articles") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify([]));
+    return;
+  }
+  if (url.pathname !== "/rest/v1/article_catalog") {
     response.writeHead(404).end();
     return;
   }
@@ -95,6 +103,7 @@ const database = createServer((request, response) => {
         category: index % 2 ? "Awareness" : "Automation",
         featured: false,
         reading_minutes: index + 1,
+        view_count: index,
       })),
     );
   for (const field of ["slug", "category", "featured"]) {
@@ -104,13 +113,19 @@ const database = createServer((request, response) => {
     if (filter?.startsWith("neq."))
       rows = rows.filter((row) => String(row[field]) !== filter.slice(4));
   }
+  for (const field of ["tags", "audience_tags"]) {
+    const filter = url.searchParams.get(field);
+    if (filter?.startsWith("cs."))
+      rows = rows.filter((row) => row[field]?.includes(filter.slice(4, -1).replaceAll('"', "")));
+  }
   const phrase = url.searchParams.get("or")?.match(/title\.ilike\.%([^%]+)%/)?.[1];
   if (phrase)
     rows = rows.filter((row) =>
       `${row.title} ${row.description}`.toLowerCase().includes(phrase.toLowerCase()),
     );
   const order = url.searchParams.get("order") ?? "date.desc";
-  if (order.startsWith("reading_minutes"))
+  if (order.startsWith("view_count")) rows.sort((a, b) => b.view_count - a.view_count);
+  else if (order.startsWith("reading_minutes"))
     rows.sort((a, b) => a.reading_minutes - b.reading_minutes);
   else
     rows.sort(
@@ -236,6 +251,9 @@ try {
     if (path === "/blog/ssr-check") {
       assert.ok(html.includes("Visible without JavaScript."));
       assert.ok(html.includes("BlogPosting"));
+      assert.ok(html.includes("workflows"));
+      assert.ok(html.includes("beginners"));
+      assert.ok(html.includes("audienceType"));
       assert.ok(html.includes('rel="canonical"'));
       assert.ok(html.includes('alt="SSR cover image"'));
       assert.ok(html.includes('alt="SSR inline image"'));
@@ -274,6 +292,21 @@ try {
   ).text();
   assert.ok(filtered.includes("Guide 11"));
   assert.ok(!filtered.includes('aria-label="Read SSR test article"'));
+  const tagged = await (
+    await fetch("http://127.0.0.1:8787/blog?tag=workflows&audience=beginners&sort=popular")
+  ).text();
+  assert.equal([...tagged.matchAll(/aria-label="Read /g)].length, 12);
+  assert.ok(
+    tagged.indexOf('aria-label="Read SSR test article"') <
+      tagged.indexOf('aria-label="Read Guide 25"'),
+  );
+  const noTag = await (await fetch("http://127.0.0.1:8787/blog?tag=unknown-topic")).text();
+  assert.ok(noTag.includes("No articles match these filters"));
+  const faviconPage = await (await fetch("http://127.0.0.1:8787/")).text();
+  assert.ok(faviconPage.includes('href="/favicon.png"'));
+  const icon = await fetch("http://127.0.0.1:8787/favicon.png");
+  assert.equal(icon.status, 200);
+  assert.ok(icon.headers.get("content-type").includes("image/png"));
   const noMatch = await (await fetch("http://127.0.0.1:8787/blog?q=notfound")).text();
   assert.ok(noMatch.includes("No articles match these filters"));
   const homepage = await (await fetch("http://127.0.0.1:8787/")).text();

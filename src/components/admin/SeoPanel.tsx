@@ -64,6 +64,51 @@ export function SeoPanel({
         checks to review. Title length is advisory. Canonical and structured data checks inspect the
         deployed site.
       </p>
+      <details className="rounded-xl border border-border p-4 text-sm">
+        <summary className="cursor-pointer font-semibold">
+          Google Search Console and favicon checks
+        </summary>
+        <ol className="mt-3 list-decimal space-y-2 pl-5">
+          <li>
+            Choose the domain property for sitenova.dev or the exact URL-prefix property
+            https://ai-insights.sitenova.dev/. Check the Performance date range and clear query/page
+            filters. An empty report does not establish an indexing failure.
+          </li>
+          <li>
+            Submit{" "}
+            <a
+              className="text-primary"
+              href={SITE.url + "/sitemap.xml"}
+              target="_blank"
+              rel="noreferrer"
+            >
+              the sitemap
+            </a>
+            . Inspect a published article URL and run Test live URL. Check indexing status, last
+            crawl and Google's selected canonical.
+          </li>
+          <li>
+            Inspect the homepage and request indexing after deploying favicon changes. Google must
+            crawl the homepage and favicon; refreshing search results may take days or weeks.
+          </li>
+          <li>
+            Topic and reader tags appear in visible article content and BlogPosting data. Google
+            chooses ranking and audiences; keyword meta tags do not improve rankings.
+          </li>
+        </ol>
+        <a
+          className="mt-3 inline-block text-primary"
+          href="https://search.google.com/search-console"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open Search Console →
+        </a>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Search Console is not connected to this dashboard. Its impressions and clicks are separate
+          from Reader analytics.
+        </p>
+      </details>
       {message && (
         <p role="status" className="rounded-lg bg-secondary p-3 text-sm">
           {message}

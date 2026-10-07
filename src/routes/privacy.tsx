@@ -46,6 +46,22 @@ export const Route = createFileRoute("/privacy")({
           Cloudflare hosts this site, and Supabase serves article content and images. These
           providers may process technical request data to operate their services.
         </p>
+        <h2>Article readership</h2>
+        <p>
+          We count article reads using a random identifier stored only for your browser tab session.
+          A view is counted once per article, session and UTC day. We record the article, date, a
+          broad referral source (such as Google or direct), mobile or desktop device group, and
+          whether the tab was visible for at least 30 seconds. We do not store IP addresses, full
+          referring URLs or browser fingerprints in our readership database. Session records older
+          than 90 days are removed on the next recorded read or admin analytics refresh; aggregate
+          article view totals remain.
+        </p>
+        <p>
+          Browsers with Do Not Track or Global Privacy Control enabled are excluded. Closing the tab
+          clears its session identifier. Article tags describe intended readers; they do not
+          establish your occupation or demographic identity. Hosting providers may separately
+          process request logs.
+        </p>
         <h2>External resources</h2>
         <p>
           Pages may load fonts from Google Fonts. External links and advertisements take you to

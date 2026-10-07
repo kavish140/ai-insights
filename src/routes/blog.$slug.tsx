@@ -1,3 +1,4 @@
+import { ArticleTracker } from "@/components/ArticleTracker";
 import { socialMeta, DEFAULT_SOCIAL_IMAGE } from "@/lib/social-meta";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
@@ -50,6 +51,13 @@ export const Route = createFileRoute("/blog/$slug")({
             "@context": "https://schema.org",
             "@type": "BlogPosting",
             headline: post.title,
+            keywords: post.tags ?? [],
+            articleSection: post.category,
+            about: (post.tags ?? []).map((name) => ({ "@type": "Thing", name })),
+            audience: (post.audience_tags ?? []).map((audienceType) => ({
+              "@type": "Audience",
+              audienceType,
+            })),
             description: post.description,
             datePublished: post.date,
             dateModified: post.updatedAt || post.date,
@@ -84,6 +92,7 @@ function PostPage() {
 
   return (
     <article>
+      <ArticleTracker slug={post.slug} />
       <header className="bg-hero border-b border-border">
         <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 md:py-20">
           <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
@@ -112,6 +121,31 @@ function PostPage() {
               </span>
             )}
           </div>
+          <div className="mt-5 flex flex-wrap gap-2" aria-label="Article topics">
+            {(post.tags ?? []).map((tag) => (
+              <Link
+                key={tag}
+                to="/blog"
+                search={{ tag, sort: "popular" }}
+                className="rounded-full border border-border px-3 py-1 text-xs text-primary"
+              >
+                {tag}
+              </Link>
+            ))}
+          </div>
+          {!!post.audience_tags?.length && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              For:{" "}
+              {post.audience_tags.map((audience, index) => (
+                <span key={audience}>
+                  {index > 0 && ", "}
+                  <Link to="/blog" search={{ audience, sort: "popular" }} className="text-primary">
+                    {audience}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          )}
           {post.cover_image_url && (
             <ArticleImage
               src={post.cover_image_url}

@@ -3,6 +3,9 @@ export type Post = {
   title: string;
   description: string;
   category: string;
+  tags?: string[];
+  audience_tags?: string[];
+  views?: number;
   date: string;
   updatedAt?: string;
   readingMinutes: number;

@@ -20,6 +20,8 @@ const fields = z.object({
   slug: z.string().max(200).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
   description: z.string().trim().min(1).max(160),
   category: z.string().trim().min(1).max(80),
+  tags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(12).optional().describe('Topics, e.g. ai agents, workflows. Use consistent tags from existing posts.'),
+  audience_tags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(12).optional().describe('Intended readers, e.g. beginners, developers, business owners.'),
   author: z.string().trim().min(1).max(200),
   date: z.iso.date(),
   body: z.string().min(1).max(200000),
@@ -123,7 +125,8 @@ export function createServer(database: SupabaseClient, controls?: McpControls) {
       if (settingsError) databaseError(settingsError);
       return ({
       name: settings.name, default_author: settings.default_author, url: SITE_URL, categories: (topics ?? []).map(topic => topic.name), controls,
-      limits: { title: 200, description: 160, author: 200, body: 200000 },
+      limits: { title: 200, description: 160, author: 200, body: 200000, tags_per_field: 12, tag_characters: 40 },
+      reader_tags: 'Include topic tags and audience_tags for every new article. Use specific lowercase topics (ai agents, ai workflows, email) and intended readers (beginners, developers, business owners, team leaders). Reuse consistent names from list_posts. Tags drive related reading and public filters; they do not guarantee Google rankings or describe verified visitor demographics.',
       article_format: 'HTML paragraphs, headings h2-h4, lists, links, blockquotes, strong/em, code blocks, img, figure and figcaption. Every image must use a returned blog-images URL and meaningful alt text. No scripts, styles or embeds.',
       images: { bucket: IMAGE_BUCKET, public_before_publication: true, max_bytes: controls?.max_image_bytes ?? MAX_IMAGE_BYTES, formats: controls?.allowed_formats ?? ['png', 'jpg', 'webp'], import_hosts: IMPORT_HOSTS, workflow: 'Use upload_image or import_image_url, then set cover_image_url/cover_image_alt through create_draft or update_draft, or embed img in the body. Provide source, credit, and reuse permission. No image generation tool is provided.' },
       rules: ['Create articles as drafts.', 'Get the current revision before editing.', 'Publish or unpublish only after the human explicitly requests that action.', 'Use a new request_id for each change; reuse it for exact retries.', 'A public endpoint cannot verify who gave approval.'],
@@ -151,7 +154,7 @@ export function createServer(database: SupabaseClient, controls?: McpControls) {
     description: 'Find drafts and published articles by title, category, or status. Returns summaries without article bodies.',
     inputSchema: z.object({ status: z.enum(['draft', 'published', 'all']).default('all'), category: z.string().trim().min(1).max(80).optional(), search: z.string().max(100).optional(), page: z.number().int().min(1).max(10000).default(1), page_size: z.number().int().min(1).max(50).default(20) }).strict(),
     handler: safeHandler(async args => {
-      let query = database.from('posts').select('id,slug,title,description,category,author,date,featured,status,revision,updated_at,cover_image_url,cover_image_alt', { count: 'exact' }).order('updated_at', { ascending: false }).order('id', { ascending: false });
+      let query = database.from('posts').select('id,slug,title,description,category,author,date,featured,status,revision,updated_at,cover_image_url,cover_image_alt,tags,audience_tags', { count: 'exact' }).order('updated_at', { ascending: false }).order('id', { ascending: false });
       if (args.status !== 'all') query = query.eq('status', args.status);
       if (args.category) query = query.eq('category', args.category);
       if (args.search) query = query.ilike('title', `%${args.search.replace(/[\\%_]/g, '\\$&')}%`);
@@ -172,6 +175,8 @@ export function createServer(database: SupabaseClient, controls?: McpControls) {
     inputSchema: fields.extend({ author: fields.shape.author.optional(), date: fields.shape.date.optional(), featured: z.boolean().default(false), request_id: requestId }).strict(),
     handler: safeHandler(async args => {
       const { request_id, ...article } = args;
+      if (article.tags) article.tags = [...new Set(article.tags)];
+      if (article.audience_tags) article.audience_tags = [...new Set(article.audience_tags)];
       const { body, reading_minutes, markup_removed } = safeContent(article.body);
       // Leave an omitted date to the database so a retry across midnight stays identical.
       const result = await write(database, 'create_draft', { request_id }, { ...article, body, reading_minutes });
@@ -184,6 +189,8 @@ export function createServer(database: SupabaseClient, controls?: McpControls) {
     inputSchema: z.object({ ...target, changes: fields.partial().refine(value => Object.keys(value).length > 0, 'Provide at least one changed field.') }).strict(),
     handler: safeHandler(async args => {
       const changes: Record<string, unknown> = { ...args.changes };
+      if (args.changes.tags) changes.tags = [...new Set(args.changes.tags)];
+      if (args.changes.audience_tags) changes.audience_tags = [...new Set(args.changes.audience_tags)];
       let markup_removed = false;
       if (args.changes.body !== undefined) {
         const clean = safeContent(args.changes.body);

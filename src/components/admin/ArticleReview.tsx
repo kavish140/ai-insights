@@ -135,6 +135,8 @@ export function ArticleReview({
                           "slug",
                           "description",
                           "category",
+                          "tags",
+                          "audience_tags",
                           "author",
                           "date",
                           "status",
@@ -144,7 +146,10 @@ export function ArticleReview({
                           "body",
                         ] as const
                       )
-                        .filter((key) => selected.snapshot[key] !== article[key])
+                        .filter(
+                          (key) =>
+                            JSON.stringify(selected.snapshot[key]) !== JSON.stringify(article[key]),
+                        )
                         .map((key) => (
                           <tr key={key} className="border-t border-border align-top">
                             <th className="p-2">{key}</th>

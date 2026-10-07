@@ -7,8 +7,10 @@ import { getArticlePage } from "@/lib/post-functions";
 
 type BlogSearch = {
   category?: string | undefined;
+  tag?: string | undefined;
+  audience?: string | undefined;
   q?: string | undefined;
-  sort?: "latest" | "oldest" | "shortest" | undefined;
+  sort?: "latest" | "oldest" | "shortest" | "popular" | undefined;
   page?: number | undefined;
 };
 
@@ -18,7 +20,20 @@ export const Route = createFileRoute("/blog/")({
   validateSearch: (search: Record<string, unknown>): BlogSearch => ({
     category: typeof search["category"] === "string" ? search["category"].slice(0, 100) : undefined,
     q: typeof search["q"] === "string" ? search["q"].trim().slice(0, 100) : undefined,
-    sort: search["sort"] === "oldest" || search["sort"] === "shortest" ? search["sort"] : "latest",
+    tag:
+      typeof search["tag"] === "string"
+        ? search["tag"].trim().toLowerCase().slice(0, 40)
+        : undefined,
+    audience:
+      typeof search["audience"] === "string"
+        ? search["audience"].trim().toLowerCase().slice(0, 40)
+        : undefined,
+    sort:
+      search["sort"] === "popular"
+        ? "popular"
+        : search["sort"] === "oldest" || search["sort"] === "shortest"
+          ? search["sort"]
+          : "latest",
     page:
       Number.isInteger(Number(search["page"])) && Number(search["page"]) > 0
         ? Math.min(Number(search["page"]), 10000)
@@ -64,8 +79,23 @@ function BlogIndex() {
         className="mt-8 flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          const query = String(new FormData(event.currentTarget).get("q") ?? "");
-          void navigate({ search: { ...search, q: query.trim() || undefined, page: 1 } });
+          const form = new FormData(event.currentTarget);
+          const query = String(form.get("q") ?? "");
+          void navigate({
+            search: {
+              ...search,
+              q: query.trim() || undefined,
+              tag:
+                String(form.get("tag") ?? "")
+                  .trim()
+                  .toLowerCase() || undefined,
+              audience:
+                String(form.get("audience") ?? "")
+                  .trim()
+                  .toLowerCase() || undefined,
+              page: 1,
+            },
+          });
         }}
       >
         <label className="w-full text-sm font-medium sm:min-w-64 sm:flex-1">
@@ -78,6 +108,28 @@ function BlogIndex() {
             defaultValue={search.q ?? ""}
             placeholder="Try email, workflows, privacy…"
             className="mt-2 w-full rounded-lg border border-input bg-surface px-4 py-2.5"
+          />
+        </label>
+        <label className="text-sm font-medium">
+          Topic tag
+          <input
+            key={search.tag}
+            name="tag"
+            maxLength={40}
+            defaultValue={search.tag ?? ""}
+            placeholder="e.g. ai agents"
+            className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
+          />
+        </label>
+        <label className="text-sm font-medium">
+          For readers
+          <input
+            key={search.audience}
+            name="audience"
+            maxLength={40}
+            defaultValue={search.audience ?? ""}
+            placeholder="e.g. beginners"
+            className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
           />
         </label>
         <button className="rounded-lg bg-brand-gradient px-5 py-2.5 text-sm font-medium text-primary-foreground">
@@ -94,6 +146,7 @@ function BlogIndex() {
             }}
             className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
           >
+            <option value="popular">Most read</option>
             <option value="latest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="shortest">Shortest read</option>
@@ -134,6 +187,8 @@ function BlogIndex() {
         {total} {total === 1 ? "article" : "articles"}
         {search.q ? ` matching “${search.q}”` : ""}
         {category ? ` in ${category}` : ""}
+        {search.tag ? ` tagged “${search.tag}”` : ""}
+        {search.audience ? ` for ${search.audience}` : ""}
       </p>
 
       <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

@@ -1,3 +1,4 @@
+import { parseTags } from "./reader-tags";
 import { browserClient } from "./supabase-client";
 import { categories } from "./posts";
 import { normalizeSettings } from "./site-settings";
@@ -10,6 +11,8 @@ export type Article = {
   slug: string;
   description: string;
   category: string;
+  tags?: string[];
+  audience_tags?: string[];
   author: string;
   date: string;
   body: string;
@@ -42,6 +45,8 @@ export const emptyArticle = (
   slug: "",
   description: "",
   category,
+  tags: [],
+  audience_tags: [],
   author,
   date: new Date().toISOString().slice(0, 10),
   body: "",
@@ -89,6 +94,8 @@ export async function saveArticle(article: Article) {
     slug: article.slug,
     description: article.description.trim(),
     category: article.category,
+    tags: parseTags((article.tags ?? []).join(",")),
+    audience_tags: parseTags((article.audience_tags ?? []).join(",")),
     author: article.author.trim(),
     date: article.date,
     body: article.body,

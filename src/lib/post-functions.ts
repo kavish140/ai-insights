@@ -4,7 +4,9 @@ import { z } from "zod";
 export const articleSearchSchema = z.object({
   q: z.string().trim().max(100).optional(),
   category: z.string().max(100).optional(),
-  sort: z.enum(["latest", "oldest", "shortest"]).optional(),
+  tag: z.string().trim().toLowerCase().max(40).optional(),
+  audience: z.string().trim().toLowerCase().max(40).optional(),
+  sort: z.enum(["latest", "oldest", "shortest", "popular"]).optional(),
   page: z.number().int().min(1).max(10000).optional(),
 });
 

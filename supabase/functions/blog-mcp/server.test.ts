@@ -42,9 +42,64 @@ before(async () => {
   await db.exec(await readFile(new URL('20261007060501_top_admin.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261007082552_expanded_site_settings.sql', migrations), 'utf8'));
 
+  await db.exec(await readFile(new URL('20261007115755_reader_discovery.sql', migrations), 'utf8'));
   await db.exec('set role service_role');
 });
 after(async () => { await db.close(); });
+
+test('reader tags survive MCP edits and reject invalid tag values', async () => {
+  const created = await call('create_draft', { ...draft(), tags: [' Workflows ', 'workflows'], audience_tags: ['Beginners'] });
+  assert.deepEqual(created.post.tags, ['workflows']);
+  assert.deepEqual(created.post.audience_tags, ['beginners']);
+  const edited = await call('update_draft', { post_id: created.post.id, expected_revision: created.post.revision, request_id: randomUUID(), changes: { title: 'Retain reader tags' } });
+  assert.deepEqual(edited.post.tags, ['workflows']);
+  const cleared = await call('update_draft', { post_id: edited.post.id, expected_revision: edited.post.revision, request_id: randomUUID(), changes: { tags: [] } });
+  assert.deepEqual(cleared.post.tags, []);
+  assert.ok((await call('create_draft', { ...draft(), tags: ['x'.repeat(41)] })).error);
+});
+
+test('anonymous reads deduplicate, protect sessions, exclude drafts and rank by relevance then views', async () => {
+  await db.exec('reset role');
+  const ids = [randomUUID(),randomUUID(),randomUUID(),randomUUID(),randomUUID()];
+  const slugs = ids.map((id) => `reader-${id}`);
+  const session = randomUUID();
+  const adminId = randomUUID();
+  await db.query('insert into auth.users(id) values ($1)', [adminId]);
+  await db.query('insert into public.admin_users(user_id) values ($1)', [adminId]);
+  try {
+    for (let index=0;index<ids.length;index++) {
+      await db.query(`insert into public.posts(id,slug,title,description,category,author,date,body,status,tags,audience_tags)
+        values ($1,$2,'Reader test','A reader test article','Automation','AI Insights',current_date,'<p>Test</p>',$3,$4,array['beginners'])`,
+        [ids[index], slugs[index], index===4 ? 'draft' : 'published', index===3 ? ['unrelated'] : ['workflows']]);
+    }
+    await db.exec('set role anon');
+    for (const engaged of [false,false,true]) await db.query('select public.record_article_read($1,$2,$3,$4,$5)',[slugs[1],session,'google','mobile',engaged]);
+    await db.query('select public.record_article_read($1,$2,$3,$4,false)',[slugs[4],session,'direct','desktop']);
+    assert.equal((await db.query<{views:number}>('select views from public.post_readership where post_id=$1',[ids[1]])).rows[0].views,1);
+    await assert.rejects(db.query('select * from private.article_reads'), /permission denied/);
+    await assert.rejects(db.query('select public.reader_analytics(30)'), /permission denied/);
+    await assert.rejects(db.query('update public.post_readership set views=999'), /permission denied/);
+    assert.equal((await db.query('select * from public.article_catalog where id=$1',[ids[4]])).rows.length,0);
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query('select public.reader_analytics(30)'), /Admin access required/);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[adminId]);
+    const report = (await db.query<{report:{views:number;engaged:number;sessions:number}}>('select public.reader_analytics(30) report')).rows[0].report;
+    assert.equal(report.views,1); assert.equal(report.engaged,1); assert.equal(report.sessions,1);
+    await db.query('select public.record_article_read($1,$2,$3,$4,false)',[slugs[0],randomUUID(),'direct','desktop']);
+    await db.exec('reset role');
+    assert.equal((await db.query('select * from private.article_reads')).rows.length,1);
+    await db.query('insert into public.post_readership(post_id,views) values($1,5),($2,100)',[ids[2],ids[3]]);
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role anon');
+    const related = (await db.query<{slug:string}>('select slug from public.related_articles($1)',[slugs[0]])).rows.map(row=>row.slug);
+    assert.deepEqual(related,[slugs[2],slugs[1],slugs[3]]);
+  } finally {
+    await db.exec('reset role');
+    await db.query('delete from public.posts where id=any($1)',[ids]);
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role service_role');
+  }
+});
 
 // A minimal PostgREST boundary runs every write through the real PostgreSQL RPC.
 // Read queries implement only the filters exercised by the MCP tools.

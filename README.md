@@ -170,6 +170,13 @@ Verification: `npm run check`, `npm run build`, `node scripts/smoke-ssr.mjs`, an
 
 ## Blog MCP
 
+Reader discovery adds editable topic/audience tags, tag filters and most-read sorting,
+related recommendations ranked by shared tags then views, and an admin Readers dashboard.
+It also exposes tags in server-rendered article content and structured data and adds a
+branded 96×96 favicon fallback. See [reader discovery setup](docs/reader-discovery.md)
+for the required SQL migration, deployment order, measurement definitions and Search
+Console troubleshooting. Apply that migration before deploying the website update.
+
 The Supabase Edge Function `blog-mcp` lets Claude manage drafts and publish on
 explicit request. It is public and unauthenticated, as requested. See
 `supabase/functions/blog-mcp/README.md` for tools, manual deployment, and checks.
