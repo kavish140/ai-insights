@@ -8,7 +8,7 @@ import type { ContentScan } from "./content-health";
 import { inspectContent } from "./content-scanner.server";
 
 const endpoint = "https://gutvbukqlqutjwlbmfpr.supabase.co/functions/v1/blog-mcp";
-async function adminClient(token: string) {
+export async function adminClient(token: string) {
   const { url, key } = publicConfiguration();
   const client = createClient(url, key, {
     global: { headers: { Authorization: `Bearer ${token}` } },

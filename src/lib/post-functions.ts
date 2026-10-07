@@ -40,5 +40,13 @@ export const getPublicConfiguration = createServerFn({ method: "GET" }).handler(
 export const getSiteContent = createServerFn({ method: "GET" }).handler(async () => {
   const { siteContent } = await import("./supabase.server");
   const { engagementConfig } = await import("./email-delivery");
-  return { ...(await siteContent()), engagement: engagementConfig(process.env) };
+  const content = await siteContent();
+  const configured = engagementConfig(process.env);
+  return {
+    ...content,
+    engagement: {
+      contact: configured.contact && content.site.contact_form_enabled,
+      newsletter: configured.newsletter && content.site.newsletter_enabled,
+    },
+  };
 });

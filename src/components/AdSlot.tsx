@@ -1,3 +1,4 @@
+import { useLoaderData } from "@tanstack/react-router";
 type AdSlotProps = {
   /** Reserved for a future AdSense integration. */
   slotId?: string;
@@ -10,6 +11,8 @@ type AdSlotProps = {
  * Replace this creative with the approved ad integration when it is ready.
  */
 export function AdSlot({ slotId, format, label = "Advertisement" }: AdSlotProps) {
+  const { site } = useLoaderData({ from: "__root__" });
+  if (!site.show_house_ads) return null;
   return (
     <aside aria-label={label} data-ad-format={format} data-ad-slot={slotId} className="w-full">
       <span className="mb-2 block text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">

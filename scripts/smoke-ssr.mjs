@@ -21,6 +21,7 @@ const article = {
 article.body =
   "<h2>Key takeaways</h2><ul><li>Test with sample data.</li></ul><h2>Workflow steps</h2>" +
   article.body;
+let customSettings = false;
 let expanded = false;
 let empty = false;
 let coverEnabled = true;
@@ -31,6 +32,24 @@ const database = createServer((request, response) => {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(
       JSON.stringify({
+        ...(customSettings
+          ? {
+              brand_initials: "CI",
+              header_cta_label: "Explore guides",
+              home_title: "Custom home heading",
+              home_seo_title: "Custom SEO title",
+              home_seo_description: "Custom SEO description",
+              articles_per_page: 6,
+              home_latest_count: 2,
+              show_reading_path: false,
+              show_house_ads: false,
+              newsletter_enabled: false,
+              contact_form_enabled: false,
+              contact_email: "editor@example.com",
+              footer_note: "Custom footer note",
+              linkedin_url: "https://www.linkedin.com/company/example",
+            }
+          : {}),
         name: "Configured Insights",
         tagline: "Practical AI automation, explained clearly",
         description: "An article rendered by the server.",
@@ -261,6 +280,24 @@ try {
   assert.ok(homepage.indexOf("Featured") < homepage.indexOf("Advertisement"));
   assert.ok(homepage.includes("start-here"));
   assert.equal([...homepage.matchAll(/aria-label="Read /g)].length, 7);
+  customSettings = true;
+  const configuredHome = await (await fetch("http://127.0.0.1:8787/")).text();
+  assert.equal(metaContent(configuredHome, "property", "og:title"), "Custom SEO title");
+  assert.equal(metaContent(configuredHome, "name", "description"), "Custom SEO description");
+  assert.ok(configuredHome.includes("Custom home heading"));
+  assert.ok(configuredHome.includes("Explore guides"));
+  assert.ok(configuredHome.includes("Custom footer note"));
+  assert.ok(configuredHome.includes('href="https://www.linkedin.com/company/example"'));
+  assert.ok(!configuredHome.includes('id="start-here"'));
+  assert.ok(!configuredHome.includes('aria-label="Advertisement"'));
+  assert.ok(!configuredHome.includes('aria-label="Configured Insights newsletter"'));
+  assert.equal([...configuredHome.matchAll(/aria-label="Read /g)].length, 3);
+  const configuredBlog = await (await fetch("http://127.0.0.1:8787/blog?page=2")).text();
+  assert.equal([...configuredBlog.matchAll(/aria-label="Read /g)].length, 6);
+  assert.ok(configuredBlog.replace(/<!--.*?-->/g, "").includes("Page 2 of 5"));
+  const configuredContact = await (await fetch("http://127.0.0.1:8787/contact")).text();
+  assert.ok(configuredContact.includes('href="mailto:editor@example.com"'));
+  assert.ok(!configuredContact.includes("<form"));
   empty = true;
   const home = await fetch("http://127.0.0.1:8787/");
   assert.equal(home.status, 200);

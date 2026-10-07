@@ -40,6 +40,8 @@ before(async () => {
   await db.exec(await readFile(new URL('20261007043618_basic_admin.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261007051335_good_admin.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261007060501_top_admin.sql', migrations), 'utf8'));
+  await db.exec(await readFile(new URL('20261007082552_expanded_site_settings.sql', migrations), 'utf8'));
+
   await db.exec('set role service_role');
 });
 after(async () => { await db.close(); });
@@ -558,4 +560,46 @@ test('content scanner parses saved HTML, deduplicates URLs, caps requests and di
   const many=Array.from({length:50},(_,i) => `<a href="/page-${i}">Link</a>`).join('');
   const capped=await inspectContent([{id:randomUUID(),title:'Long article',body:many,cover_image_url:''}],'https://ai-insights.sitenova.dev',fakeFetch);
   assert.equal(capped.articles[0].links.length,40); assert.equal(capped.articles[0].truncated,true);
+});
+
+
+test('expanded settings enforce admin access, constraints, revision conflicts and immutable history', async () => {
+  await db.exec('reset role');
+  const adminId = randomUUID();
+  await db.query('insert into auth.users(id) values ($1)', [adminId]);
+  await db.query('insert into public.admin_users(user_id) values ($1)', [adminId]);
+  try {
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role anon');
+    assert.equal((await db.query('select newsletter_enabled,home_latest_count from public.site_settings')).rows.length, 1);
+    await assert.rejects(db.query('select * from public.site_settings_history'), /permission denied/);
+    await db.exec('set role authenticated');
+    assert.equal((await db.query("update public.site_settings set newsletter_enabled=false returning id")).rows.length, 0);
+    assert.equal((await db.query('select * from public.site_settings_history')).rows.length, 0);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [adminId]);
+    const original = (await db.query<{settings_revision: number}>('select settings_revision from public.site_settings')).rows[0].settings_revision;
+    const changed = await db.query<{settings_revision: number}>("update public.site_settings set newsletter_enabled=false,home_latest_count=2,settings_revision=9999 where settings_revision=$1 returning settings_revision", [original]);
+    assert.equal(changed.rows[0].settings_revision, original + 1, 'The database owns the revision counter');
+    assert.equal((await db.query("update public.site_settings set newsletter_enabled=true where settings_revision=$1 returning id", [original])).rows.length, 0, 'Stale saves cannot overwrite newer settings');
+    const audit = (await db.query<{actor_id:string;before_value:{newsletter_enabled:boolean};after_value:{newsletter_enabled:boolean}}>('select * from public.site_settings_history order by id desc limit 1')).rows[0];
+    assert.equal(audit.actor_id, adminId);
+    assert.equal(audit.before_value.newsletter_enabled, true);
+    assert.equal(audit.after_value.newsletter_enabled, false);
+    await assert.rejects(db.query('delete from public.site_settings_history'), /permission denied/);
+    await assert.rejects(db.query("update public.site_settings set articles_per_page=0"), /check constraint/);
+    await assert.rejects(db.query("update public.site_settings set linkedin_url='javascript:alert(1)'"), /check constraint/);
+    await assert.rejects(db.query("update public.site_settings set linkedin_url='https://user:password@example.com'"), /check constraint/);
+    await assert.rejects(db.query("update public.site_settings set default_category='Missing topic'"), /foreign key/);
+    await db.query("insert into public.categories(name) values ('Settings category')");
+    await db.query("update public.site_settings set default_category='Settings category'");
+    await db.query("update public.categories set name='Settings renamed' where name='Settings category'");
+    assert.equal((await db.query<{default_category:string}>('select default_category from public.site_settings')).rows[0].default_category, 'Settings renamed');
+    await db.query("delete from public.categories where name='Settings renamed'");
+    assert.equal((await db.query<{default_category:string|null}>('select default_category from public.site_settings')).rows[0].default_category, null);
+  } finally {
+    await db.exec('reset role');
+    await db.query('update public.site_settings set newsletter_enabled=true,home_latest_count=6');
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role service_role');
+  }
 });

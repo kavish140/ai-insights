@@ -9,17 +9,25 @@ import { Newsletter } from "@/components/Newsletter";
 
 export const Route = createFileRoute("/")({
   loader: () => getHomeArticles(),
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
-      { title: "AI Insights — Practical AI Automation & Awareness" },
+      {
+        title:
+          loaderData?.settings.home_seo_title ??
+          "AI Insights — Practical AI Automation & Awareness",
+      },
       {
         name: "description",
         content:
+          loaderData?.settings.home_seo_description ??
           "Clear guides on AI automation, agents and workflows, plus honest awareness pieces on privacy and misinformation.",
       },
       ...socialMeta({
-        title: "AI Insights — Practical AI Automation & Awareness",
+        title:
+          loaderData?.settings.home_seo_title ??
+          "AI Insights — Practical AI Automation & Awareness",
         description:
+          loaderData?.settings.home_seo_description ??
           "Clear guides on AI automation, agents and workflows, plus honest awareness pieces on privacy and misinformation.",
         path: "/",
       }),
@@ -42,7 +50,7 @@ function HomePage() {
               {site.tagline}
             </span>
             <h1 className="mt-6 max-w-3xl text-4xl font-bold leading-[1.1] md:text-6xl">
-              AI automation, <span className="text-brand-gradient">explained without the hype</span>
+              {site.home_title}
             </h1>
             <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
               {site.description}
@@ -54,13 +62,15 @@ function HomePage() {
               >
                 Read the latest
               </Link>
-              <Link
-                to="/"
-                hash="start-here"
-                className="rounded-lg border border-border bg-surface px-5 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-              >
-                Start with the basics
-              </Link>
+              {site.show_reading_path && (
+                <Link
+                  to="/"
+                  hash="start-here"
+                  className="rounded-lg border border-border bg-surface px-5 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+                >
+                  Start with the basics
+                </Link>
+              )}
             </div>
           </div>
           <div className="hidden rounded-2xl border border-primary/15 bg-surface/70 p-6 md:block">
@@ -89,7 +99,7 @@ function HomePage() {
             )}
           </div>
         </section>
-        <ReadingPath posts={path} />
+        {site.show_reading_path && <ReadingPath posts={path} />}
         <div className="mb-10">
           <AdSlot format="leaderboard" />
         </div>

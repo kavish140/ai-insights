@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { SITE } from "@/lib/posts";
+import type { SiteSettings } from "@/lib/site-settings";
 
 const nav = [
   { to: "/", label: "Home" },
@@ -9,7 +10,7 @@ const nav = [
   { to: "/contact", label: "Contact" },
 ] as const;
 
-export function SiteHeader({ site = SITE }: { site?: typeof SITE }) {
+export function SiteHeader({ site = SITE }: { site?: typeof SITE & Partial<SiteSettings> }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -17,7 +18,7 @@ export function SiteHeader({ site = SITE }: { site?: typeof SITE }) {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2.5">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient text-sm font-bold text-primary-foreground">
-            AI
+            {site.brand_initials ?? "AI"}
           </span>
           <span className="font-display text-base font-semibold tracking-tight">{site.name}</span>
         </Link>
@@ -38,7 +39,7 @@ export function SiteHeader({ site = SITE }: { site?: typeof SITE }) {
             to="/blog"
             className="ml-2 rounded-lg bg-brand-gradient px-4 py-2 text-sm font-medium text-primary-foreground shadow-card"
           >
-            Start reading
+            {site.header_cta_label ?? "Start reading"}
           </Link>
         </nav>
 

@@ -3,19 +3,20 @@ import { useState } from "react";
 import { subscribeNewsletter } from "@/lib/engagement-functions";
 
 export function Newsletter() {
-  const { engagement } = useLoaderData({ from: "__root__" });
+  const { engagement, site } = useLoaderData({ from: "__root__" });
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [done, setDone] = useState(false);
+  if (!site.newsletter_enabled) return null;
   return (
     <section
-      aria-label="AI Insights newsletter"
+      aria-label={`${site.name} newsletter`}
       className="rounded-2xl border border-border bg-primary-soft/50 p-6"
     >
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">Keep learning</p>
-      <h2 className="mt-2 text-xl font-semibold">Practical AI, in your inbox.</h2>
+      <h2 className="mt-2 text-xl font-semibold">{site.newsletter_title}</h2>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Get new guides and workflow checklists. Useful steps, clear tradeoffs, and no hype.
+        {site.newsletter_description}
       </p>
       {!engagement.newsletter ? (
         <p className="mt-4 text-sm text-muted-foreground">
@@ -69,7 +70,7 @@ export function Newsletter() {
             <label className="flex items-start gap-2 text-xs leading-relaxed">
               <input type="checkbox" name="consent" required className="mt-1" />
               <span>
-                I agree to receive AI Insights emails. Unsubscribe anytime.{" "}
+                I agree to receive {site.name} emails. Unsubscribe anytime.{" "}
                 <Link to="/privacy" className="text-primary underline">
                   Privacy details
                 </Link>

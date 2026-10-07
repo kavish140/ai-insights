@@ -5,20 +5,25 @@ import type { Post } from "./posts";
 import { isBlogImageUrl } from "./blog-images";
 import { SITE, categories } from "./posts";
 import { EDITOR } from "./editorial";
+import { normalizeSettings } from "./site-settings";
+
+export async function loadSiteSettings(client = publicClient()) {
+  const { data, error } = await client.from("site_settings").select("*").single();
+  if (error && error.code !== "PGRST205") throw new Error("Could not load site settings.");
+  return normalizeSettings(data);
+}
 
 export async function siteContent() {
   const client = publicClient();
   const [settings, topics] = await Promise.all([
-    client.from("site_settings").select("name,tagline,description").single(),
+    loadSiteSettings(client),
     client.from("categories").select("name").order("name"),
   ]);
   // Older deployments can serve their existing branding until the admin migration is applied.
-  if (settings.error && settings.error.code !== "PGRST205")
-    throw new Error("Could not load site settings.");
   if (topics.error && topics.error.code !== "PGRST205")
     throw new Error("Could not load categories.");
   return {
-    site: { ...SITE, ...settings.data },
+    site: { ...SITE, ...settings },
     categories: topics.data?.map((topic) => topic.name) ?? [...categories],
     imageTransforms: process.env["SUPABASE_IMAGE_TRANSFORMS"] === "true",
   };
@@ -151,6 +156,8 @@ export type ArticleSearch = {
 };
 
 export async function articlePage(input: ArticleSearch) {
+  const settings = await loadSiteSettings();
+  const pageSize = settings.articles_per_page;
   const page = input.page ?? 1;
   let query = publicClient()
     .from("posts")
@@ -165,12 +172,15 @@ export async function articlePage(input: ArticleSearch) {
     input.sort === "shortest"
       ? query.order("reading_minutes")
       : query.order("date", { ascending: input.sort === "oldest" });
-  const { data, error, count } = await query.order("slug").range((page - 1) * 12, page * 12 - 1);
+  const { data, error, count } = await query
+    .order("slug")
+    .range((page - 1) * pageSize, page * pageSize - 1);
   if (error) throw new Error("Could not load articles. Please try again.");
-  return { posts: (data ?? []).map(toPost), total: count ?? 0, page };
+  return { posts: (data ?? []).map(toPost), total: count ?? 0, page, pageSize };
 }
 
 export async function homeArticles() {
+  const settings = await loadSiteSettings();
   const base = () =>
     publicClient()
       .from("posts")
@@ -178,7 +188,10 @@ export async function homeArticles() {
       .eq("status", "published")
       .lte("date", new Date().toISOString().slice(0, 10));
   const [latest, featured, ...path] = await Promise.all([
-    base().order("date", { ascending: false }).order("slug").limit(7),
+    base()
+      .order("date", { ascending: false })
+      .order("slug")
+      .limit(settings.home_latest_count + 1),
     base().eq("featured", true).order("date", { ascending: false }).order("slug").limit(1),
     ...["Awareness", "Automation", "Strategy"].map((category) =>
       base().eq("category", category).order("date", { ascending: true }).order("slug").limit(1),
@@ -188,10 +201,11 @@ export async function homeArticles() {
     throw new Error("Could not load articles.");
   const lead = featured.data?.[0] ?? latest.data?.[0];
   return {
+    settings,
     featured: lead ? toPost(lead) : null,
     latest: (latest.data ?? [])
       .filter((row) => row.slug !== lead?.slug)
-      .slice(0, 6)
+      .slice(0, settings.home_latest_count)
       .map(toPost),
     path: path.map((result) => (result.data?.[0] ? toPost(result.data[0]) : null)),
   };

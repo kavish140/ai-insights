@@ -27,7 +27,7 @@ export const Route = createFileRoute("/contact")({
 
 function ContactPage() {
   const [sent, setSent] = useState(false);
-  const { engagement } = useLoaderData({ from: "__root__" });
+  const { engagement, site } = useLoaderData({ from: "__root__" });
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [requestId, setRequestId] = useState("");
@@ -40,8 +40,8 @@ function ContactPage() {
       </p>
       <p className="mt-3 text-sm text-muted-foreground">
         You can also email{" "}
-        <a href="mailto:kavishganatra5@gmail.com" className="text-primary underline">
-          kavishganatra5@gmail.com
+        <a href={`mailto:${site.contact_email}`} className="text-primary underline">
+          {site.contact_email}
         </a>
         .
       </p>

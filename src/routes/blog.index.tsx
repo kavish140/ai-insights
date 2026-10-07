@@ -48,7 +48,7 @@ function BlogIndex() {
   const { categories } = useLoaderData({ from: "__root__" });
   const search = Route.useSearch();
   const { category } = search;
-  const { posts: list, total, page } = Route.useLoaderData();
+  const { posts: list, total, page, pageSize } = Route.useLoaderData();
   const navigate = Route.useNavigate();
 
   return (
@@ -150,7 +150,7 @@ function BlogIndex() {
           </Link>
         </div>
       )}
-      {total > 12 && (
+      {total > pageSize && (
         <nav aria-label="Article pages" className="mt-8 flex items-center justify-between gap-4">
           {page > 1 ? (
             <Link
@@ -164,9 +164,9 @@ function BlogIndex() {
             <span />
           )}
           <span className="text-sm text-muted-foreground">
-            Page {page} of {Math.ceil(total / 12)}
+            Page {page} of {Math.ceil(total / pageSize)}
           </span>
-          {page * 12 < total ? (
+          {page * pageSize < total ? (
             <Link
               to="/blog"
               search={{ ...search, page: page + 1 }}

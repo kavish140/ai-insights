@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Activity,
   SearchCheck,
+  Mail,
 } from "lucide-react";
 import { browserClient } from "@/lib/supabase-client";
 import {
@@ -34,6 +35,9 @@ import { MediaTools } from "./admin/MediaTools";
 import { DashboardInsights } from "./admin/DashboardInsights";
 import { ContentPanel } from "./admin/ContentPanel";
 import { SystemPanel } from "./admin/SystemPanel";
+import { SettingsPanel } from "./admin/SettingsPanel";
+import { SubscribersPanel } from "./admin/SubscribersPanel";
+import { normalizeSettings } from "@/lib/site-settings";
 import type { Operation, PublishingActivity } from "@/lib/admin-operations";
 
 const input = "mt-2 w-full rounded-lg border border-input bg-surface px-3 py-2.5 text-sm";
@@ -50,6 +54,7 @@ const tabs = [
   { name: "Categories", icon: Tags },
   { name: "Media", icon: Images },
   { name: "System", icon: Settings2 },
+  { name: "Subscribers", icon: Mail },
   { name: "Settings", icon: Settings2 },
 ] as const;
 type Tab = (typeof tabs)[number]["name"] | "Editor";
@@ -74,6 +79,7 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [settingsDirty, setSettingsDirty] = useState(false);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -112,7 +118,7 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
       allRows<Article>("posts", "id"),
       allRows<{ name: string }>("categories", "name"),
       allRows<Media>("blog_images", "path"),
-      client.from("site_settings").select("name,tagline,description,default_author").single(),
+      client.from("site_settings").select("*").single(),
     ]);
     if (configuration.error) throw configuration.error;
     setArticles(
@@ -120,7 +126,7 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
     );
     setTopics(categories.map((item) => item.name));
     setMedia(images.sort((a, b) => b.created_at.localeCompare(a.created_at)));
-    setSettings(configuration.data);
+    setSettings(normalizeSettings(configuration.data));
     setAuthorized(true);
     const audit = await allRows<PublishingActivity>("post_activity", "id");
     setActivity(audit.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id));
@@ -165,6 +171,8 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
   }
   function navigate(next: Tab) {
     if (tab === "Editor" && dirty && !window.confirm("Discard unsaved article corrections?"))
+      return;
+    if (tab === "Settings" && settingsDirty && !window.confirm("Discard unsaved site settings?"))
       return;
     setTab(next);
     setMessage("");
@@ -345,7 +353,15 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
           <button
             className={button}
             disabled={busy || loading}
-            onClick={() => void run(async () => {}, "Up to date.")}
+            onClick={() => {
+              if (
+                tab === "Settings" &&
+                settingsDirty &&
+                !window.confirm("Discard unsaved site settings and refresh?")
+              )
+                return;
+              void run(async () => {}, "Up to date.");
+            }}
           >
             <RefreshCw size={15} />
             Refresh
@@ -358,6 +374,12 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                 tab === "Editor" &&
                 dirty &&
                 !window.confirm("Discard unsaved article corrections and sign out?")
+              )
+                return;
+              if (
+                tab === "Settings" &&
+                settingsDirty &&
+                !window.confirm("Discard unsaved site settings and sign out?")
               )
                 return;
               void signOut().catch((error) => setMessage(messageFor(error)));
@@ -480,7 +502,14 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                   </h2>
                   <button
                     className={button}
-                    onClick={() => edit(emptyArticle(settings.default_author, topics[0]))}
+                    onClick={() =>
+                      edit(
+                        emptyArticle(
+                          settings.default_author,
+                          settings.default_category ?? topics[0],
+                        ),
+                      )
+                    }
                   >
                     New emergency draft
                   </button>
@@ -1095,50 +1124,14 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                 )}
               </div>
             )}
+            {tab === "Subscribers" && <SubscribersPanel />}
             {tab === "Settings" && (
-              <form
-                className={`${panel} max-w-3xl space-y-5`}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void run(async () => {
-                    const { error } = await (
-                      await browserClient()
-                    )
-                      .from("site_settings")
-                      .update(settings)
-                      .eq("id", true)
-                      .select("id")
-                      .single();
-                    if (error) throw error;
-                  }, "Site settings saved.");
-                }}
-              >
-                <h2 className="text-xl font-semibold">Site settings</h2>
-                <p className="text-sm text-muted-foreground">
-                  Name, tagline and description appear on the public site. The default author is
-                  used for new emergency drafts.
-                </p>
-                {(
-                  [
-                    ["name", "Site name", 80],
-                    ["tagline", "Tagline", 160],
-                    ["description", "Site description", 500],
-                    ["default_author", "Default author", 200],
-                  ] as const
-                ).map(([key, label, max]) => (
-                  <Field key={key} label={label}>
-                    <textarea
-                      required
-                      className={input}
-                      rows={key === "description" ? 3 : 1}
-                      maxLength={max}
-                      value={settings[key]}
-                      onChange={(event) => setSettings({ ...settings, [key]: event.target.value })}
-                    />
-                  </Field>
-                ))}
-                <button className={primary}>Save settings</button>
-              </form>
+              <SettingsPanel
+                settings={settings}
+                topics={topics}
+                run={run}
+                onDirty={setSettingsDirty}
+              />
             )}
           </fieldset>
           {review && (

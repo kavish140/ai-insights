@@ -2,6 +2,34 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const credentials = z.object({ token: z.string().min(1).max(10000) });
+export const getSubscribers = createServerFn({ method: "POST" })
+  .validator(
+    credentials.extend({
+      cursor: z.string().uuid().optional(),
+      accountWide: z.boolean().default(false),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { adminClient } = await import("./admin-operations.server");
+    await adminClient(data.token);
+    const { subscriberPage } = await import("./resend-subscribers.server");
+    return subscriberPage(process.env, data.cursor, data.accountWide);
+  });
+export const getEmailConfiguration = createServerFn({ method: "POST" })
+  .validator(credentials)
+  .handler(async ({ data }) => {
+    const { adminClient } = await import("./admin-operations.server");
+    await adminClient(data.token);
+    return {
+      resendConfigured: !!process.env["RESEND_API_KEY"],
+      segmentConfigured: !!process.env["RESEND_SEGMENT_ID"],
+      contactConfigured: !!(
+        process.env["RESEND_API_KEY"] &&
+        process.env["CONTACT_FROM"] &&
+        process.env["CONTACT_TO"]
+      ),
+    };
+  });
 export const scanContent = createServerFn({ method: "POST" })
   .validator(credentials.extend({ postIds: z.array(z.string().uuid()).min(1).max(5) }))
   .handler(async ({ data }) => {

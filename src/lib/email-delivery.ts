@@ -28,7 +28,7 @@ export async function deliverEngagement(
       ok: false,
       message:
         kind === "contact"
-          ? "Message delivery is temporarily unavailable. Please email kavishganatra5@gmail.com."
+          ? "Message delivery is temporarily unavailable. Please use the email listed on the Contact page."
           : "Subscriptions are temporarily unavailable. Please try again later.",
     };
   try {

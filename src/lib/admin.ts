@@ -1,5 +1,7 @@
 import { browserClient } from "./supabase-client";
-import { categories, SITE } from "./posts";
+import { categories } from "./posts";
+import { normalizeSettings } from "./site-settings";
+export type { Settings } from "./site-settings";
 
 export type Article = {
   id?: string;
@@ -18,12 +20,6 @@ export type Article = {
   created_at?: string;
   updated_at?: string;
 };
-export type Settings = {
-  name: string;
-  tagline: string;
-  description: string;
-  default_author: string;
-};
 export type Media = {
   path: string;
   url: string;
@@ -37,12 +33,7 @@ export type Media = {
   width?: number | null;
   height?: number | null;
 };
-export const defaultSettings: Settings = {
-  name: SITE.name,
-  tagline: SITE.tagline,
-  description: SITE.description,
-  default_author: "AI Insights",
-};
+export const defaultSettings = normalizeSettings(null);
 export const emptyArticle = (
   author = "AI Insights",
   category: string = categories[0],
