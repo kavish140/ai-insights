@@ -26,7 +26,7 @@ export const SITE = {
 export const categories = ["Automation", "Awareness", "Strategy"] as const;
 
 export function formatDate(iso: string) {
-  return new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", {
+  return new Date(iso.length === 10 ? iso + "T00:00:00Z" : iso).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",

@@ -4,6 +4,7 @@ import sanitizeHtml from "sanitize-html";
 import type { Post } from "./posts";
 import { isBlogImageUrl } from "./blog-images";
 import { SITE, categories } from "./posts";
+import { EDITOR } from "./editorial";
 
 export async function siteContent() {
   const client = publicClient();
@@ -19,6 +20,7 @@ export async function siteContent() {
   return {
     site: { ...SITE, ...settings.data },
     categories: topics.data?.map((topic) => topic.name) ?? [...categories],
+    imageTransforms: process.env["SUPABASE_IMAGE_TRANSFORMS"] === "true",
   };
 }
 
@@ -66,7 +68,13 @@ export function cleanBody(body: string) {
       "figure",
       "figcaption",
     ],
-    allowedAttributes: { a: ["href", "title", "rel"], img: ["src", "alt", "loading", "decoding"] },
+    allowedAttributes: {
+      a: ["href", "title", "rel"],
+      img: ["src", "alt", "loading", "decoding"],
+      h2: ["id"],
+      h3: ["id"],
+      h4: ["id"],
+    },
     transformTags: {
       img: (_tag, attributes) => ({
         tagName: "img",
@@ -98,18 +106,117 @@ export async function publishedPosts(): Promise<Post[]> {
     .order("date", { ascending: false });
   if (error)
     throw new Error("Could not load articles. Check the Supabase migration and connection.");
-  return (data ?? []).map((row) => ({
+  return (data ?? []).map(toPost);
+}
+
+const summaryColumns =
+  "slug,title,description,category,date,updated_at,author,featured,reading_minutes,cover_image_url,cover_image_alt";
+
+type PostRow = {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  date: string;
+  updated_at?: string;
+  author: string;
+  featured?: boolean;
+  reading_minutes: number;
+  cover_image_url?: string | null;
+  cover_image_alt?: string | null;
+  body?: string;
+};
+export function toPost(row: PostRow): Post {
+  return {
     slug: row.slug,
     title: row.title,
     description: row.description,
     category: row.category,
     date: row.date,
-    updatedAt: row.updated_at,
-    author: row.author,
-    featured: row.featured,
+    updatedAt: row.updated_at ?? row.date,
+    author: row.author === "AI Insights" ? EDITOR.name : row.author,
+    featured: row.featured ?? false,
     readingMinutes: row.reading_minutes,
-    cover_image_url: isBlogImageUrl(row.cover_image_url ?? "") ? row.cover_image_url : "",
+    cover_image_url: isBlogImageUrl(row.cover_image_url ?? "") ? (row.cover_image_url ?? "") : "",
     cover_image_alt: row.cover_image_alt ?? "",
-    body: cleanBody(row.body),
-  }));
+    body: row.body ? cleanBody(row.body) : "",
+  };
+}
+
+export type ArticleSearch = {
+  q?: string | undefined;
+  category?: string | undefined;
+  sort?: "latest" | "oldest" | "shortest" | undefined;
+  page?: number | undefined;
+};
+
+export async function articlePage(input: ArticleSearch) {
+  const page = input.page ?? 1;
+  let query = publicClient()
+    .from("posts")
+    .select(summaryColumns, { count: "exact" })
+    .eq("status", "published")
+    .lte("date", new Date().toISOString().slice(0, 10));
+  if (input.category) query = query.eq("category", input.category);
+  // Escape PostgREST grammar and LIKE wildcards; the query is a literal phrase.
+  const phrase = input.q?.replace(/[^\p{L}\p{N}\s-]/gu, " ").trim();
+  if (phrase) query = query.or(`title.ilike.%${phrase}%,description.ilike.%${phrase}%`);
+  query =
+    input.sort === "shortest"
+      ? query.order("reading_minutes")
+      : query.order("date", { ascending: input.sort === "oldest" });
+  const { data, error, count } = await query.order("slug").range((page - 1) * 12, page * 12 - 1);
+  if (error) throw new Error("Could not load articles. Please try again.");
+  return { posts: (data ?? []).map(toPost), total: count ?? 0, page };
+}
+
+export async function homeArticles() {
+  const base = () =>
+    publicClient()
+      .from("posts")
+      .select(summaryColumns)
+      .eq("status", "published")
+      .lte("date", new Date().toISOString().slice(0, 10));
+  const [latest, featured, ...path] = await Promise.all([
+    base().order("date", { ascending: false }).order("slug").limit(7),
+    base().eq("featured", true).order("date", { ascending: false }).order("slug").limit(1),
+    ...["Awareness", "Automation", "Strategy"].map((category) =>
+      base().eq("category", category).order("date", { ascending: true }).order("slug").limit(1),
+    ),
+  ]);
+  if ([latest, featured, ...path].some((result) => result.error))
+    throw new Error("Could not load articles.");
+  const lead = featured.data?.[0] ?? latest.data?.[0];
+  return {
+    featured: lead ? toPost(lead) : null,
+    latest: (latest.data ?? [])
+      .filter((row) => row.slug !== lead?.slug)
+      .slice(0, 6)
+      .map(toPost),
+    path: path.map((result) => (result.data?.[0] ? toPost(result.data[0]) : null)),
+  };
+}
+
+export async function articleBySlug(slug: string) {
+  const base = () =>
+    publicClient()
+      .from("posts")
+      .select("*")
+      .eq("status", "published")
+      .lte("date", new Date().toISOString().slice(0, 10));
+  const { data, error } = await base().eq("slug", slug).maybeSingle();
+  if (error) throw new Error("Could not load this article.");
+  if (!data) return null;
+  const related = await publicClient()
+    .from("posts")
+    .select(summaryColumns)
+    .eq("status", "published")
+    .lte("date", new Date().toISOString().slice(0, 10))
+    .eq("category", data.category)
+    .neq("slug", slug)
+    .order("date", { ascending: false })
+    .order("slug")
+    .limit(3);
+  if (related.error) throw new Error("Could not load related articles.");
+  return { post: toPost(data), related: (related.data ?? []).map(toPost) };
 }

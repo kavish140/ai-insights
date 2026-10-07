@@ -11,6 +11,8 @@
   },
   "observability": { "enabled": true },
   "vars": {
+    "CONTACT_FROM": "AI Insights <hello@sitenova.dev>",
+    "CONTACT_TO": "kavishganatra5@gmail.com",
     "SUPABASE_URL": "https://gutvbukqlqutjwlbmfpr.supabase.co",
     "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_z2ABivFnqHAvLAK7Q7aeoA__1tS1yP3",
   },

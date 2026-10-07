@@ -18,6 +18,10 @@ const article = {
   cover_image_alt: "SSR cover image",
   body: `<p>Visible without JavaScript.</p><script>unsafe_marker</script><p onclick="unsafe_marker()">Safe paragraph.</p><a href="javascript:unsafe_marker()">Link</a><figure><img src="${imageUrl}" alt="SSR inline image" onerror="unsafe_marker()"><figcaption>SSR image caption</figcaption></figure><img src="https://evil.example/unsafe_marker.png" alt="Unsafe image">`,
 };
+article.body =
+  "<h2>Key takeaways</h2><ul><li>Test with sample data.</li></ul><h2>Workflow steps</h2>" +
+  article.body;
+let expanded = false;
 let empty = false;
 let coverEnabled = true;
 let queries = 0;
@@ -54,20 +58,61 @@ const database = createServer((request, response) => {
   assert.equal(url.searchParams.get("status"), "eq.published");
   assert.match(url.searchParams.get("date"), /^lte\.\d{4}-\d{2}-\d{2}$/);
   queries++;
-  response.writeHead(200, { "content-type": "application/json" });
-  response.end(
-    JSON.stringify(
-      empty
-        ? []
-        : [
-            {
-              ...article,
-              cover_image_url: coverEnabled ? imageUrl : "",
-              cover_image_alt: coverEnabled ? article.cover_image_alt : "",
-            },
-          ],
-    ),
-  );
+  let rows = empty
+    ? []
+    : [
+        {
+          ...article,
+          cover_image_url: coverEnabled ? imageUrl : "",
+          cover_image_alt: coverEnabled ? article.cover_image_alt : "",
+        },
+      ];
+  if (expanded && !empty)
+    rows.push(
+      ...Array.from({ length: 26 }, (_, index) => ({
+        ...article,
+        slug: `guide-${index}`,
+        title: `Guide ${index}`,
+        category: index % 2 ? "Awareness" : "Automation",
+        featured: false,
+        reading_minutes: index + 1,
+      })),
+    );
+  for (const field of ["slug", "category", "featured"]) {
+    const filter = url.searchParams.get(field);
+    if (filter?.startsWith("eq."))
+      rows = rows.filter((row) => String(row[field]) === filter.slice(3));
+    if (filter?.startsWith("neq."))
+      rows = rows.filter((row) => String(row[field]) !== filter.slice(4));
+  }
+  const phrase = url.searchParams.get("or")?.match(/title\.ilike\.%([^%]+)%/)?.[1];
+  if (phrase)
+    rows = rows.filter((row) =>
+      `${row.title} ${row.description}`.toLowerCase().includes(phrase.toLowerCase()),
+    );
+  const order = url.searchParams.get("order") ?? "date.desc";
+  if (order.startsWith("reading_minutes"))
+    rows.sort((a, b) => a.reading_minutes - b.reading_minutes);
+  else
+    rows.sort(
+      (a, b) =>
+        (order.startsWith("date.asc")
+          ? a.date.localeCompare(b.date)
+          : b.date.localeCompare(a.date)) || a.slug.localeCompare(b.slug),
+    );
+  const total = rows.length;
+  const offset = Number(url.searchParams.get("offset") ?? 0);
+  const limit = Number(url.searchParams.get("limit") ?? total);
+  rows = rows.slice(offset, offset + limit);
+  if (url.searchParams.get("select") !== "*")
+    rows = rows.map((row) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => key !== "body")),
+    );
+  response.writeHead(200, {
+    "content-type": "application/json",
+    "content-range": `${offset}-${offset + rows.length - 1}/${total}`,
+  });
+  response.end(JSON.stringify(rows));
 });
 await new Promise((resolve) => database.listen(54322, "127.0.0.1", resolve));
 const worker = spawn(
@@ -116,7 +161,7 @@ try {
     assert.equal(tags.length, 1, `Expected exactly one ${key} tag`);
     return tags[0].match(/content="([^"]*)"/)?.[1];
   }
-  for (const path of ["/", "/blog", "/about", "/contact", "/blog/ssr-check"]) {
+  for (const path of ["/", "/blog", "/about", "/contact", "/privacy", "/blog/ssr-check"]) {
     const response = await fetch(`http://127.0.0.1:8787${path}`);
     assert.equal(response.status, 200);
     const html = await response.text();
@@ -176,6 +221,10 @@ try {
       assert.ok(html.includes('alt="SSR cover image"'));
       assert.ok(html.includes('alt="SSR inline image"'));
       assert.ok(html.includes("SSR image caption"));
+      assert.ok(html.includes('id="section-1"'));
+      assert.ok(html.includes('aria-label="On this page"'));
+      assert.ok(html.includes("Updated"));
+      assert.ok(html.includes("Download workflow checklist"));
       assert.ok(html.includes('property="og:image" content="' + imageUrl + '"'));
     }
   }
@@ -192,13 +241,33 @@ try {
     "https://ai-insights.sitenova.dev/images/og-cover.jpg",
   );
   assert.equal(metaContent(fallbackHtml, "property", "og:image:width"), "1200");
+  const contact = await (await fetch("http://127.0.0.1:8787/contact")).text();
+  assert.ok(contact.includes("contact form is temporarily unavailable"));
+  assert.ok(!contact.includes("message received"));
+  expanded = true;
+  const firstPage = await (await fetch("http://127.0.0.1:8787/blog")).text();
+  assert.equal([...firstPage.matchAll(/aria-label="Read /g)].length, 12);
+  assert.ok(firstPage.replace(/<!--.*?-->/g, "").includes("Page 1 of 3"));
+  const thirdPage = await (await fetch("http://127.0.0.1:8787/blog?page=3")).text();
+  assert.equal([...thirdPage.matchAll(/aria-label="Read /g)].length, 3);
+  const filtered = await (
+    await fetch("http://127.0.0.1:8787/blog?category=Awareness&q=Guide%201&sort=shortest")
+  ).text();
+  assert.ok(filtered.includes("Guide 11"));
+  assert.ok(!filtered.includes('aria-label="Read SSR test article"'));
+  const noMatch = await (await fetch("http://127.0.0.1:8787/blog?q=notfound")).text();
+  assert.ok(noMatch.includes("No articles match these filters"));
+  const homepage = await (await fetch("http://127.0.0.1:8787/")).text();
+  assert.ok(homepage.indexOf("Featured") < homepage.indexOf("Advertisement"));
+  assert.ok(homepage.includes("start-here"));
+  assert.equal([...homepage.matchAll(/aria-label="Read /g)].length, 7);
   empty = true;
   const home = await fetch("http://127.0.0.1:8787/");
   assert.equal(home.status, 200);
   assert.ok((await home.text()).includes("Our first articles are coming soon."));
   assert.ok(queries >= 6);
   console.log(
-    "Passed: Worker SSR, Open Graph and Twitter cards on public pages, cover/fallback previews, HTML sanitization, sitemap, 404, admin shell, and empty homepage.",
+    "Passed: Worker SSR, public metadata/privacy, cover/fallback previews, sanitization, article navigation/checklists, unavailable contact, search/filters/pagination, homepage limits, sitemap, 404, admin shell, and empty homepage.",
   );
 } finally {
   worker.kill();

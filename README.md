@@ -63,7 +63,12 @@ The smoke check runs the production Worker against a local API fixture. It check
 SSR article HTML, metadata, sanitization, the sitemap, a 404, the admin shell, and
 the empty homepage. It does not write to your Supabase project.
 
-The Contact form and advertising placements remain placeholders.
+The public site includes search, sorting, pagination, a beginner reading path,
+article navigation, workflow checklists and editorial/privacy pages. Contact and
+newsletter forms use Resend and remain explicitly unavailable until configured.
+SiteNova house advertisements follow editorial content.
+See `docs/public-site-plan.md` for the implementation phases and
+`docs/email-setup.md` for activation instructions.
 
 ## Basic admin
 

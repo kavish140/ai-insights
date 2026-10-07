@@ -308,6 +308,31 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  :where(a, button, input, textarea, select):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+  }
+  :where(h2, h3, h4)[id] {
+    scroll-margin-top: 6rem;
+  }
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
   * {
     border-color: var(--color-border);
   }
@@ -326,6 +351,47 @@
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
+}
+
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 1rem;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  border-radius: 0.5rem;
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+.honeypot {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.article-art {
+  display: flex;
+  aspect-ratio: 16 / 9;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  background:
+    radial-gradient(ellipse at top right, #b4e2ff, transparent 70%),
+    linear-gradient(135deg, #e9efff, #f8fbff);
+  color: #3050a0;
+  font-size: clamp(0.65rem, 1.3vw, 0.9rem);
+}
+.article-art__node {
+  border: 1px solid #adc8ef;
+  padding: 0.65rem;
+  border-radius: 0.75rem;
+  background: #ffffffb3;
+  font-weight: 600;
 }
 
 @utility bg-hero {
@@ -380,10 +446,12 @@
     list-style: disc;
   }
   & li {
+    overflow-wrap: anywhere;
     margin-block: 0.4rem;
     line-height: 1.7;
   }
   & a {
+    overflow-wrap: anywhere;
     color: var(--color-primary);
     text-decoration: underline;
   }
@@ -393,5 +461,17 @@
     padding-inline-start: 1rem;
     font-style: italic;
     color: var(--color-muted-foreground);
+  }
+  & ol {
+    margin-block: 1rem;
+    padding-inline-start: 1.25rem;
+    list-style: decimal;
+  }
+  & pre {
+    overflow-x: auto;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    background: var(--color-muted);
+    font-size: 0.875rem;
   }
 }

@@ -3,14 +3,16 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
 import { SITE, formatDate } from "@/lib/posts";
-import { listPublishedPosts } from "@/lib/post-functions";
+import { getArticle } from "@/lib/post-functions";
+import { articleOutline, articleTakeaways, checklistText } from "@/lib/article-reading";
+import { ArticleImage } from "@/components/ArticleImage";
+import { Newsletter } from "@/components/Newsletter";
 
 export const Route = createFileRoute("/blog/$slug")({
   loader: async ({ params }) => {
-    const all = await listPublishedPosts();
-    const post = all.find((post) => post.slug === params.slug);
-    if (!post) throw notFound();
-    return { post, related: all.filter((p) => p.slug !== post.slug).slice(0, 3) };
+    const article = await getArticle({ data: { slug: params.slug } });
+    if (!article) throw notFound();
+    return article;
   },
   head: ({ params, loaderData }) => {
     if (!loaderData) {
@@ -77,6 +79,8 @@ export const Route = createFileRoute("/blog/$slug")({
 
 function PostPage() {
   const { post, related } = Route.useLoaderData();
+  const { html, headings } = articleOutline(post.body);
+  const takeaways = articleTakeaways(post.body);
 
   return (
     <article>
@@ -102,13 +106,17 @@ function PostPage() {
             <time dateTime={post.date}>{formatDate(post.date)}</time>
             <span aria-hidden="true">·</span>
             <span>{post.readingMinutes} min read</span>
+            {post.updatedAt && post.updatedAt.slice(0, 10) !== post.date && (
+              <span>
+                Updated <time dateTime={post.updatedAt}>{formatDate(post.updatedAt)}</time>
+              </span>
+            )}
           </div>
           {post.cover_image_url && (
-            <img
+            <ArticleImage
               src={post.cover_image_url}
               alt={post.cover_image_alt ?? ""}
-              fetchPriority="high"
-              decoding="async"
+              featured
               className="mt-8 aspect-[16/9] w-full rounded-2xl object-cover"
             />
           )}
@@ -117,25 +125,126 @@ function PostPage() {
 
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <div
-            className="prose-article max-w-none"
-            dangerouslySetInnerHTML={{ __html: post.body }}
-          />
+          {headings.length > 0 && (
+            <details className="mb-6 rounded-xl border border-border bg-card p-5 lg:hidden">
+              <summary className="cursor-pointer font-semibold">On this page</summary>
+              <nav aria-label="Article sections" className="mt-4">
+                <ol className="space-y-3 text-sm">
+                  {headings.map((heading) => (
+                    <li key={heading.id}>
+                      <a href={`#${heading.id}`} className="text-primary">
+                        {heading.title}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            </details>
+          )}
+          {takeaways.length > 0 && (
+            <section
+              aria-label="Key takeaways"
+              className="mb-8 rounded-2xl border border-border bg-primary-soft/50 p-6"
+            >
+              <h2 className="text-lg font-semibold">Key takeaways</h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">
+                {takeaways.map((point, index) => (
+                  <li key={index}>{point}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {headings.length > 0 && (
+            <section
+              aria-labelledby="overview-title"
+              className="mb-8 rounded-2xl border border-border bg-primary-soft/50 p-6"
+            >
+              <h2 id="overview-title" className="text-lg font-semibold">
+                What you’ll learn
+              </h2>
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">
+                {headings
+                  .filter((heading) => heading.level === 2)
+                  .slice(0, 4)
+                  .map((heading) => (
+                    <li key={heading.id}>
+                      <a href={`#${heading.id}`} className="hover:text-primary">
+                        {heading.title}
+                      </a>
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-4 text-sm text-muted-foreground">{post.description}</p>
+            </section>
+          )}
+          <div className="prose-article max-w-[70ch]" dangerouslySetInnerHTML={{ __html: html }} />
+          {post.category === "Automation" && (
+            <section className="mt-10 rounded-2xl border border-border bg-card p-6">
+              <h2 className="text-lg font-semibold">Turn the guide into a tested workflow</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Use this general checklist to define approvals, test failure cases and measure the
+                result.
+              </p>
+              <a
+                href={`data:text/plain;charset=utf-8,${encodeURIComponent(checklistText(post))}`}
+                download={`${post.slug}-checklist.txt`}
+                className="mt-4 inline-block font-medium text-primary"
+              >
+                Download workflow checklist ↓
+              </a>
+            </section>
+          )}
+          <section className="mt-8 rounded-xl border border-border p-5 text-sm">
+            <h2 className="font-semibold">About the author</h2>
+            <p className="mt-2">{post.author}</p>
+            {post.author === "Kavish Ganatra" && (
+              <p className="mt-2 text-muted-foreground">
+                Kavish works on SiteNova websites and the AI Insights publishing workflow, with a
+                focus on making AI automation easier to understand and use.
+              </p>
+            )}
+            <Link to="/about" className="mt-3 inline-block text-primary">
+              Editorial standards →
+            </Link>
+            <span className="mx-3">·</span>
+            <Link to="/contact" className="text-primary">
+              Suggest a correction
+            </Link>
+          </section>
           <div className="my-10">
             <AdSlot format="in-article" />
           </div>
 
-          <section className="mt-16">
-            <h2 className="text-2xl font-semibold">Keep reading</h2>
-            <div className="mt-6 grid gap-6 sm:grid-cols-2">
-              {related.map((p) => (
-                <PostCard key={p.slug} post={p} />
-              ))}
-            </div>
-          </section>
+          {related.length > 0 && (
+            <section className="mt-16">
+              <h2 className="text-2xl font-semibold">Keep reading</h2>
+              <div className="mt-6 grid gap-6 sm:grid-cols-2">
+                {related.map((p) => (
+                  <PostCard key={p.slug} post={p} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
         <aside className="space-y-6">
+          {headings.length > 0 && (
+            <nav
+              aria-label="On this page"
+              className="hidden rounded-2xl border border-border bg-card p-6 lg:block"
+            >
+              <h2 className="font-semibold">On this page</h2>
+              <ol className="mt-4 space-y-3 text-sm">
+                {headings.map((heading) => (
+                  <li key={heading.id} className={heading.level > 2 ? "pl-3" : ""}>
+                    <a href={`#${heading.id}`} className="text-muted-foreground hover:text-primary">
+                      {heading.title}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          )}
           <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
             <h3 className="text-base font-semibold">About {SITE.name}</h3>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{SITE.tagline}.</p>
@@ -146,7 +255,7 @@ function PostPage() {
               All articles →
             </Link>
           </div>
-          <AdSlot format="sidebar" />
+          <Newsletter />
         </aside>
       </div>
     </article>

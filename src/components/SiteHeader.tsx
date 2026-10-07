@@ -46,6 +46,7 @@ export function SiteHeader({ site = SITE }: { site?: typeof SITE }) {
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
+          aria-controls="mobile-menu"
           aria-label="Toggle menu"
           className="rounded-lg border border-border p-2 text-muted-foreground md:hidden"
         >
@@ -56,7 +57,11 @@ export function SiteHeader({ site = SITE }: { site?: typeof SITE }) {
       </div>
 
       {open && (
-        <nav aria-label="Mobile" className="border-t border-border bg-surface px-4 py-3 md:hidden">
+        <nav
+          id="mobile-menu"
+          aria-label="Mobile"
+          className="border-t border-border bg-surface px-4 py-3 md:hidden"
+        >
           {nav.map((item) => (
             <Link
               key={item.to}

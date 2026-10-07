@@ -56,6 +56,11 @@ export function SiteFooter({
               </Link>
             </li>
             <li>
+              <Link to="/privacy" className="hover:text-foreground">
+                Privacy
+              </Link>
+            </li>
+            <li>
               <Link to="/admin" className="hover:text-foreground">
                 Admin
               </Link>

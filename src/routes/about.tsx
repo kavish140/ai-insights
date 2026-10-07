@@ -1,6 +1,8 @@
 import { socialMeta } from "@/lib/social-meta";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SITE } from "@/lib/posts";
+import { EDITOR } from "@/lib/editorial";
+import { Newsletter } from "@/components/Newsletter";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -28,6 +30,8 @@ function AboutPage() {
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
       <h1 className="text-3xl font-bold md:text-4xl">About {SITE.name}</h1>
       <div className="prose-article mt-6">
+        <h2>Meet {EDITOR.name}</h2>
+        <p>{EDITOR.bio}</p>
         <p>
           {SITE.name} covers two things: how to automate real work with AI, and how to stay aware of
           what AI is doing to information, privacy and jobs. Every article aims to be something you
@@ -47,8 +51,28 @@ function AboutPage() {
         </ul>
         <h2>How articles are written</h2>
         <p>
-          Recommendations come from things actually tried, and limitations are stated instead of
-          skipped. Where a tool is mentioned, the tradeoffs come with it.
+          Our editorial standard is to distinguish hands-on observations from documentation and
+          opinion. Guides should identify their sources, explain limitations and state the relevant
+          tool versions or update dates. Where a tool is mentioned, the tradeoffs belong alongside
+          it.
+        </p>
+        <h2>How to use our guides</h2>
+        <p>
+          Start with a small task and sample data. Test the output, decide what needs human
+          approval, and compare the results with your current process before using a workflow more
+          widely.
+        </p>
+        <h2>Corrections and updates</h2>
+        <p>
+          AI tools change quickly. Article pages show their latest update date when available. If a
+          claim, link or instruction looks wrong, <Link to="/contact">send a correction</Link>
+          with the article URL and the detail that needs review.
+        </p>
+        <h2>Advertising and independence</h2>
+        <p>
+          SiteNova is promoted in clearly labelled house advertisements. Advertising placements are
+          separate from article recommendations. Any sponsored or affiliate content should be
+          disclosed on the relevant article.
         </p>
       </div>
       <Link
@@ -57,6 +81,9 @@ function AboutPage() {
       >
         Read the articles
       </Link>
+      <div className="mt-12">
+        <Newsletter />
+      </div>
     </div>
   );
 }
