@@ -11,6 +11,14 @@ import {
 } from "@/lib/reader-preferences";
 import type { Post } from "@/lib/posts";
 import { PostCard } from "./PostCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "./ui/dialog";
 
 export function PersonalizedReading() {
   const [preferences, setPreferences] = useState<ReaderPreferences>(emptyPreferences);
@@ -38,7 +46,6 @@ export function PersonalizedReading() {
         setAliases(data.aliases);
         setPreferences(resolved);
         setDraft(resolved);
-        setEditing(!resolved.topics.length && !resolved.audiences.length);
         setReady(true);
       })
       .catch(() => {
@@ -114,119 +121,134 @@ export function PersonalizedReading() {
     });
   }
   return (
-    <section className="py-10" aria-labelledby="personal-reading-title">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 id="personal-reading-title" className="text-2xl font-semibold">
-            Reading for you
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Choose your interests and find articles that fit your work.
-          </p>
+    <Dialog
+      open={editing}
+      onOpenChange={(open) => {
+        if (open) setDraft(preferences);
+        setEditing(open);
+      }}
+    >
+      <section className="py-10" aria-labelledby="personal-reading-title">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="personal-reading-title" className="text-2xl font-semibold">
+              Reading for you
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Choose your interests and find articles that fit your work.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <DialogTrigger asChild>
+              <button className="rounded-lg border border-border px-3 py-2 text-sm">
+                {hasInterests ? "Edit interests" : "Choose interests"}
+              </button>
+            </DialogTrigger>
+            {hasInterests && (
+              <button
+                className="text-sm text-muted-foreground underline"
+                onClick={() => save(emptyPreferences)}
+              >
+                Reset interests
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex gap-3">
-          <button
-            className="rounded-lg border border-border px-3 py-2 text-sm"
-            onClick={() => {
-              setDraft(preferences);
-              setEditing(!editing);
+        <DialogContent className="max-h-[85dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl sm:max-w-xl">
+          <DialogTitle>Your reading interests</DialogTitle>
+          <DialogDescription>
+            Choose what interests you. You can change or reset your choices anytime.
+          </DialogDescription>
+          <form
+            className="space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save(draft);
             }}
           >
-            {editing ? "Close choices" : hasInterests ? "Edit interests" : "Choose interests"}
-          </button>
-          {hasInterests && (
-            <button
-              className="text-sm text-muted-foreground underline"
-              onClick={() => save(emptyPreferences)}
-            >
-              Reset interests
-            </button>
-          )}
-        </div>
-      </div>
-      {editing && (
-        <form
-          className="mt-5 space-y-5 rounded-2xl border border-border bg-card p-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            save(draft);
-          }}
-        >
-          {(
-            [
-              ["topics", "Topics", "topic"],
-              ["audiences", "Who are you reading as?", "audience"],
-            ] as const
-          ).map(([field, label, kind]) => (
-            <fieldset key={field}>
-              <legend className="font-medium">
-                {label} <span className="text-xs text-muted-foreground">(choose up to 12)</span>
-              </legend>
-              <div className="mt-3 flex max-h-48 flex-wrap gap-2 overflow-y-auto">
-                {[
-                  ...new Set([
-                    ...tags.filter((tag) => tag.kind === kind).map((tag) => tag.name),
-                    ...draft[field],
-                  ]),
-                ].map((name) => (
-                  <label
-                    key={name}
-                    className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm ${draft[field].includes(name) ? "border-primary bg-primary-soft" : "border-border"}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={draft[field].includes(name)}
-                      disabled={!draft[field].includes(name) && draft[field].length >= 12}
-                      onChange={() => toggle(field, name)}
-                    />
-                    {name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ))}
-          <p className="text-xs text-muted-foreground">
-            Optional. Choices are saved in this browser, and you can reset them at any time.
+            {(
+              [
+                ["topics", "Topics", "topic"],
+                ["audiences", "Who are you reading as?", "audience"],
+              ] as const
+            ).map(([field, label, kind]) => (
+              <fieldset key={field}>
+                <legend className="font-medium">
+                  {label} <span className="text-xs text-muted-foreground">(choose up to 12)</span>
+                </legend>
+                <div className="mt-3 flex max-h-48 flex-wrap gap-2 overflow-y-auto">
+                  {[
+                    ...new Set([
+                      ...tags.filter((tag) => tag.kind === kind).map((tag) => tag.name),
+                      ...draft[field],
+                    ]),
+                  ].map((name) => (
+                    <label
+                      key={name}
+                      className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm ${draft[field].includes(name) ? "border-primary bg-primary-soft" : "border-border"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={draft[field].includes(name)}
+                        disabled={!draft[field].includes(name) && draft[field].length >= 12}
+                        onChange={() => toggle(field, name)}
+                      />
+                      {name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              Optional. Choices are saved in this browser, and you can reset them at any time.
+            </p>
+            <div className="flex flex-wrap justify-end gap-3">
+              <DialogClose asChild>
+                <button type="button" className="rounded-lg border border-border px-4 py-2 text-sm">
+                  Maybe later
+                </button>
+              </DialogClose>
+              <button
+                disabled={!ready || !tags.length}
+                className="rounded-lg bg-brand-gradient px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                Show my reading
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+        {message && (
+          <p role="status" className="mt-4 text-sm text-muted-foreground">
+            {message}
           </p>
-          <button
-            disabled={!ready || !tags.length}
-            className="rounded-lg bg-brand-gradient px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-          >
-            Show my reading
-          </button>
-        </form>
-      )}
-      {message && (
-        <p role="status" className="mt-4 text-sm text-muted-foreground">
-          {message}
-        </p>
-      )}
-      {hasInterests && (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Matching {preferences.topics.concat(preferences.audiences).join(", ")}
-        </p>
-      )}
-      {loading && (
-        <p role="status" className="mt-4 text-sm">
-          Finding your reading…
-        </p>
-      )}
-      {!loading && hasInterests && !posts.length && !message && (
-        <p className="mt-4 text-sm text-muted-foreground">
-          No matching articles yet. Try another topic or explore the latest articles below.
-        </p>
-      )}
-      {!!posts.length && (
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {posts.map((post) => (
-            <PostCard
-              key={post.slug}
-              post={post}
-              recommendation={{ source: "home", placement: "personalized" }}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+        )}
+        {hasInterests && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Matching {preferences.topics.concat(preferences.audiences).join(", ")}
+          </p>
+        )}
+        {loading && (
+          <p role="status" className="mt-4 text-sm">
+            Finding your reading…
+          </p>
+        )}
+        {!loading && hasInterests && !posts.length && !message && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            No matching articles yet. Try another topic or explore the latest articles below.
+          </p>
+        )}
+        {!!posts.length && (
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {posts.map((post) => (
+              <PostCard
+                key={post.slug}
+                post={post}
+                recommendation={{ source: "home", placement: "personalized" }}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </Dialog>
   );
 }
