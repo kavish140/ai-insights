@@ -25,6 +25,37 @@ export function imageType(bytes: Uint8Array) {
   throw new Error('Use a PNG, JPEG, or WebP file. SVG, HTML, GIF, and unrecognized files are not accepted.');
 }
 
+export function imageDimensions(bytes: Uint8Array): { width: number; height: number } | {} {
+  const view = new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  const { ext } = imageType(bytes);
+  let width = 0; let height = 0;
+  if (ext === 'png') { width = view.getUint32(16); height = view.getUint32(20); }
+  if (ext === 'webp') {
+    const chunk = String.fromCharCode(...bytes.slice(12,16));
+    const uint24 = (offset: number) => bytes[offset]! + (bytes[offset+1]! << 8) + (bytes[offset+2]! << 16);
+    if (chunk === 'VP8X' && bytes.length >= 30) { width = uint24(24)+1; height = uint24(27)+1; }
+    if (chunk === 'VP8 ' && bytes.length >= 30 && bytes[23] === 157 && bytes[24] === 1 && bytes[25] === 42) { width = view.getUint16(26,true)&16383; height = view.getUint16(28,true)&16383; }
+    if (chunk === 'VP8L' && bytes.length >= 25 && bytes[20] === 47) {
+      const packed = view.getUint32(21,true); width = (packed&16383)+1; height = ((packed>>>14)&16383)+1;
+    }
+  }
+  if (ext === 'jpg') {
+    for (let offset = 2; offset+4 < bytes.length;) {
+      if (bytes[offset] !== 255) break;
+      while (bytes[offset] === 255) offset++;
+      const marker = bytes[offset++]!;
+      if (marker === 217 || marker === 218) break;
+      if (marker === 1 || (marker >= 208 && marker <= 215)) continue;
+      if (offset+2 > bytes.length) break;
+      const length = view.getUint16(offset);
+      if (length < 2 || offset+length > bytes.length) break;
+      if ([192,193,194,195,197,198,199,201,202,203,205,206,207].includes(marker) && length >= 7) { height = view.getUint16(offset+3); width = view.getUint16(offset+5); break; }
+      offset += length;
+    }
+  }
+  return width > 0 && height > 0 && width <= 100000 && height <= 100000 ? { width, height } : {};
+}
+
 export async function readLimitedImage(response: Response) {
   if (!response.ok) throw new Error(`The image host returned HTTP ${response.status}.`);
   if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) throw new Error('Image exceeds the 4 MiB limit.');
@@ -66,6 +97,7 @@ export function createImageTools(database: SupabaseClient) {
     const { data, error: recordError } = await database.from('blog_images').upsert({
       path, url: STORAGE_BASE + path, sha256: sha, mime_type: mime, byte_size: bytes.length,
       alt: details.alt, source_url: details.source_url, credit: details.credit, license_note: details.license_note,
+      ...imageDimensions(bytes),
     }, { onConflict: 'path', ignoreDuplicates: true }).select('*');
     if (recordError) throw new Error('The image uploaded, but its record could not be saved. Apply the v2 SQL migration, then retry the same image.');
     const existing = data?.[0] ?? (await database.from('blog_images').select('*').eq('path', path).single()).data;

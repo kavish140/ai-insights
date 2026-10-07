@@ -9,7 +9,7 @@ const nav = [
   { to: "/contact", label: "Contact" },
 ] as const;
 
-export function SiteHeader() {
+export function SiteHeader({ site = SITE }: { site?: typeof SITE }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -19,7 +19,7 @@ export function SiteHeader() {
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient text-sm font-bold text-primary-foreground">
             AI
           </span>
-          <span className="font-display text-base font-semibold tracking-tight">{SITE.name}</span>
+          <span className="font-display text-base font-semibold tracking-tight">{site.name}</span>
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 md:flex">

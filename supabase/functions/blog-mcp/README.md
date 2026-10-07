@@ -21,7 +21,7 @@ policies still apply to website clients.
    / Function configuration. The function intentionally has no OAuth or token check.
 6. Supabase injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in its Edge runtime.
    No credentials need to be pasted into the function, Claude, or Cloudflare.
-7. Visit the endpoint's `/health` URL; version should be `2.0.0`.
+7. Visit the endpoint's `/health` URL; version should be `2.1.0` with the Good admin update.
 8. Keep the existing Claude connector and endpoint below. Refresh/reconnect if it
    still shows only eight tools; v2 exposes eleven tools. Authentication stays None.
 9. Deploy the matching website build for cover images, inline images, captions,
@@ -84,6 +84,23 @@ PostgreSQL performs the write, revision increment, audit entry, and retry record
 in a single transaction. Audit rows are in `public.post_activity`; private retry
 records are in `private.mcp_requests`. Public website clients cannot read these
 records or invoke the write RPC.
+
+## Good admin update (v2.1)
+
+Apply `supabase/migrations/20261007051335_good_admin.sql` after the Basic admin
+migration before deploying this version. It adds private-to-admin revision snapshots,
+MCP operation logs and image dimensions. Deploy the regenerated dashboard file;
+`/health` then reports database availability and `activity_tracking`.
+
+Tool-call results, including argument-validation errors and handler failures, are
+logged in `public.mcp_operations`. Logs contain redacted arguments and concise result
+metadata; image base64 and credential fields are omitted. Logging failures do not
+change a completed tool's result. New image uploads record dimensions where their
+headers support extraction. Existing image records can be inspected in the admin.
+
+Admin retries use the original arguments, request UUID and expected revision through
+the same public MCP tools. A retry cannot bypass publication validation or revision
+checks. Baseline snapshots capture current posts; older lost versions are not recreated.
 
 Suggested first prompt: “Read the site context, create an article as a draft,
 then validate it. Do not publish until I explicitly ask you to.” Publishing updates

@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { createClient } from '@supabase/supabase-js';
 import { createHandler } from './server.ts';
-import { checkImportUrl, readLimitedImage, MAX_IMAGE_BYTES } from './images.ts';
+import { checkImportUrl, readLimitedImage, MAX_IMAGE_BYTES, imageDimensions } from './images.ts';
+import { activityArguments } from './activity.ts';
+import { seoIssues } from '../../../src/lib/seo-health.ts';
 
 const db = new PGlite();
 const storedImages = new Map<string, Uint8Array>();
@@ -17,6 +19,11 @@ before(async () => {
     create role authenticated;
     create role service_role bypassrls;
     create schema auth;
+    create schema storage;
+    create table storage.objects(id uuid primary key default gen_random_uuid(), bucket_id text, name text);
+    alter table storage.objects enable row level security;
+    grant usage on schema storage to authenticated;
+    grant select, insert, delete on storage.objects to authenticated;
     create table auth.users(id uuid primary key, email text);
     create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -26,6 +33,8 @@ before(async () => {
   await db.exec(await readFile(new URL('202610050001_articles.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261005115834_mcp_blog_tools.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261005170811_mcp_images_v2.sql', migrations), 'utf8'));
+  await db.exec(await readFile(new URL('20261007043618_basic_admin.sql', migrations), 'utf8'));
+  await db.exec(await readFile(new URL('20261007051335_good_admin.sql', migrations), 'utf8'));
   await db.exec('set role service_role');
 });
 after(async () => { await db.close(); });
@@ -36,8 +45,17 @@ const client = createClient('http://database.invalid', 'test-server-credential',
   auth: { persistSession: false },
   global: { fetch: async (input, init) => {
     const request = new Request(input, init);
-    const url = new URL(request.url);
+      const url = new URL(request.url);
     try {
+      if (url.pathname.endsWith('/mcp_operations')) {
+        if (request.method === 'POST') {
+          const record = await request.json();
+          await db.query('insert into public.mcp_operations(tool,arguments,result,outcome,error,duration_ms) values ($1,$2::jsonb,$3::jsonb,$4,$5,$6)',[record.tool,JSON.stringify(record.arguments),JSON.stringify(record.result),record.outcome,record.error,record.duration_ms]);
+          return Response.json({});
+        }
+        const { rows } = await db.query('select id from public.mcp_operations limit 1');
+        return Response.json(rows);
+      }
       if (url.pathname.startsWith('/storage/v1/object/blog-images/')) {
         const path = url.pathname.slice('/storage/v1/object/blog-images/'.length);
         if (storedImages.has(path)) return Response.json({ statusCode: '409', error: 'Duplicate', message: 'The resource already exists' }, { status: 409 });
@@ -48,7 +66,7 @@ const client = createClient('http://database.invalid', 'test-server-credential',
         if (request.method === 'POST') {
           const payload = await request.json();
           const row = Array.isArray(payload) ? payload[0] : payload;
-          const columns = ['path', 'url', 'sha256', 'mime_type', 'byte_size', 'alt', 'source_url', 'credit', 'license_note'];
+          const columns = ['path', 'url', 'sha256', 'mime_type', 'byte_size', 'alt', 'source_url', 'credit', 'license_note', 'width', 'height'];
           const { rows } = await db.query(`insert into public.blog_images (${columns.join(',')}) values (${columns.map((_, i) => `$${i + 1}`).join(',')}) on conflict(path) do nothing returning *`, columns.map(key => row[key]));
           return Response.json(rows);
         }
@@ -71,6 +89,10 @@ const client = createClient('http://database.invalid', 'test-server-credential',
           [args.p_tool, args.p_request_id, JSON.stringify(args.p_payload), args.p_post_id, args.p_expected_revision],
         );
         return Response.json(rows[0].result);
+      }
+      if (url.pathname.endsWith('/categories')) {
+        const { rows } = await db.query('select name from public.categories order by name');
+        return Response.json(rows);
       }
       if (!url.pathname.endsWith('/posts')) return new Response('Not found', { status: 404 });
       const conditions: string[] = []; const params: unknown[] = [];
@@ -246,4 +268,147 @@ test('image import rejects unsafe destinations and oversized streamed downloads'
   assert.equal(checkImportUrl('https://images.unsplash.com/photo-123?w=1200').hostname, 'images.unsplash.com');
   await assert.rejects(readLimitedImage(new Response(new Uint8Array(MAX_IMAGE_BYTES + 1))), /4 MiB/);
   await assert.rejects(readLimitedImage(new Response(null, { status: 302 })), /HTTP 302/);
+});
+
+test('basic admin enforces roles, manages categories and protects used media', async () => {
+  await db.exec('reset role');
+  const adminId = randomUUID();
+  await db.query('insert into auth.users(id) values ($1)', [adminId]);
+  await db.query('insert into public.admin_users(user_id) values ($1)', [adminId]);
+  try {
+    await db.exec('set role anon');
+    assert.ok((await db.query('select * from public.categories')).rows.length >= 3);
+    await assert.rejects(db.query("insert into public.categories(name) values ('Blocked')"), /permission denied/);
+    await assert.rejects(db.query('select public.admin_access()'), /permission denied/);
+    await db.exec('set role authenticated');
+    assert.equal((await db.query<{ access: boolean }>('select public.admin_access() as access')).rows[0].access, false);
+    await assert.rejects(db.query("insert into public.categories(name) values ('Blocked')"), /row-level security/);
+    assert.equal((await db.query("update public.site_settings set name='Blocked' returning id")).rows.length, 0);
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [adminId]);
+    assert.equal((await db.query<{ access: boolean }>('select public.admin_access() as access')).rows[0].access, true);
+    await db.query("insert into public.categories(name) values ('Custom topic')");
+    const { rows: posts } = await db.query<{id: string; revision: number}>("insert into public.posts(title,slug,description,category,body) values ('Admin test','admin-check','Admin test summary','Custom topic','<p>Test content</p>') returning id,revision");
+    await db.query("update public.categories set name='Renamed topic' where name='Custom topic'");
+    const renamed = await db.query<{category: string; revision: number}>('select category,revision from public.posts where id=$1',[posts[0].id]);
+    assert.equal(renamed.rows[0].category,'Renamed topic');
+    assert.equal(renamed.rows[0].revision,2);
+    assert.equal((await db.query('update public.posts set title=$1 where id=$2 and revision=$3 returning id',['Stale edit',posts[0].id,1])).rows.length,0);
+    await assert.rejects(db.query("delete from public.categories where name='Renamed topic'"), /foreign key/);
+    assert.equal((await db.query("update public.site_settings set name='Configured site' returning id")).rows.length,1);
+    const image = (await db.query<{url: string;path: string}>('select url,path from public.blog_images limit 1')).rows[0];
+    await db.query('insert into storage.objects(bucket_id,name) values ($1,$2)', ['blog-images',image.path]);
+    assert.equal((await db.query('delete from public.blog_images where path=$1 returning path',[image.path])).rows.length,0,'Inline article protects registry');
+    assert.equal((await db.query('delete from storage.objects where name=$1 returning id',[image.path])).rows.length,0,'Inline article protects file');
+    await db.query("update public.posts set body='<p>No image</p>',cover_image_url='' where strpos(body,$1)>0 or cover_image_url=$1",[image.url]);
+    assert.equal((await db.query('delete from storage.objects where name=$1 returning id',[image.path])).rows.length,1);
+    assert.equal((await db.query('delete from public.blog_images where path=$1 returning path',[image.path])).rows.length,1);
+    await db.query('delete from public.posts where id=$1',[posts[0].id]);
+    await db.query("delete from public.categories where name='Renamed topic'");
+  } finally {
+    await db.exec('reset role');
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role service_role');
+  }
+});
+
+test('MCP discovers and publishes into an admin-managed category', async () => {
+  await db.exec('reset role');
+  await db.query("insert into public.categories(name) values ('MCP custom topic')");
+  try {
+    await db.exec('set role service_role');
+    assert.ok((await call('get_site_context', {})).categories.includes('MCP custom topic'));
+    const created = await call('create_draft', { ...draft(), category: 'MCP custom topic' });
+    assert.ok(!created.error, JSON.stringify(created));
+    const published = await call('publish_post', { post_id: created.post.id, expected_revision: 1, request_id: randomUUID(), confirmed: true });
+    assert.ok(!published.error, JSON.stringify(published));
+    assert.equal(published.post.category, 'MCP custom topic');
+  } finally {
+    await db.exec('reset role');
+    await db.query("delete from public.posts where category='MCP custom topic'");
+    await db.query("delete from public.categories where name='MCP custom topic'");
+    await db.exec('set role service_role');
+  }
+});
+
+test('operations log successful calls, handler failures, schema failures and redacted uploads', async () => {
+  await call('get_site_context', {});
+  const bad = await call('create_draft', { request_id: randomUUID(), title: 'Incomplete' });
+  assert.ok(bad.error);
+  const failed = await call('get_post', { post_id: randomUUID() });
+  assert.ok(failed.error);
+  const records = await db.query<{tool: string;outcome: string;arguments: Record<string,unknown>;result: Record<string,unknown>;error: string}>('select * from public.mcp_operations');
+  assert.ok(records.rows.some(row => row.tool === 'get_site_context' && row.outcome === 'success'));
+  assert.ok(records.rows.some(row => row.tool === 'create_draft' && row.outcome === 'failed'));
+  assert.ok(records.rows.some(row => row.tool === 'get_post' && row.outcome === 'failed' && row.error.includes('POST_NOT_FOUND')));
+  assert.ok(records.rows.filter(row => row.tool === 'upload_image').every(row => row.arguments.base64 === '[omitted]'));
+  assert.deepEqual(activityArguments({base64: 'abc',token: 'private',changes: {password: 'private',body:'Article'}}),{base64:'[omitted]',token:'[omitted]',changes:{password:'[omitted]',body:'Article'}});
+  assert.equal(activityArguments({body:'x'.repeat(250001)}).payload_omitted,'Arguments exceeded the logging limit.');
+  const health = await handler(new Request('https://example.com/blog-mcp/health'));
+  assert.equal(health.status,200);
+  assert.equal((await health.json()).activity_tracking,true);
+});
+
+test('revision snapshots preserve content through updates, restoration and deletion', async () => {
+  const created = await call('create_draft', draft());
+  const changed = await call('update_draft', {post_id:created.post.id,expected_revision:1,request_id:randomUUID(),changes:{body:'<p>Changed content.</p>'}});
+  await db.exec('reset role');
+  try {
+    const versions = await db.query<{revision: number;snapshot: {body: string};source: string}>('select * from public.post_revisions where post_id=$1 order by revision',[created.post.id]);
+    assert.equal(versions.rows.length,2);
+    assert.equal(versions.rows[0].snapshot.body,created.post.body);
+    assert.equal(versions.rows[1].snapshot.body,changed.post.body);
+    await db.query('update public.posts set body=$1,status=$2 where id=$3 and revision=$4',[versions.rows[0].snapshot.body,'draft',created.post.id,2]);
+    const restored = await db.query<{revision:number;body:string;status:string}>('select * from public.posts where id=$1',[created.post.id]);
+    assert.equal(restored.rows[0].revision,3);
+    assert.equal(restored.rows[0].body,created.post.body);
+    assert.equal(restored.rows[0].status,'draft');
+    await db.query('delete from public.posts where id=$1',[created.post.id]);
+    assert.equal((await db.query('select * from public.post_revisions where post_id=$1',[created.post.id])).rows.length,3);
+  } finally { await db.exec('set role service_role'); }
+});
+
+test('operation logs and revisions are private to designated admins and immutable from browser clients', async () => {
+  try {
+    await db.exec('set role anon');
+    await assert.rejects(db.query('select * from public.mcp_operations'),/permission denied/);
+    await assert.rejects(db.query('select * from public.post_revisions'),/permission denied/);
+    await db.exec('set role authenticated');
+    assert.equal((await db.query('select * from public.mcp_operations')).rows.length,0);
+    assert.equal((await db.query('select * from public.post_revisions')).rows.length,0);
+    await assert.rejects(db.query("insert into public.mcp_operations(tool,outcome,duration_ms) values ('fake','success',0)"),/permission denied/);
+    await assert.rejects(db.query('delete from public.post_revisions'),/permission denied/);
+  } finally { await db.exec('set role service_role'); }
+});
+
+test('admin-scheduled posts stay hidden until their date', async () => {
+  await db.exec('reset role');
+  const id = randomUUID();
+  try {
+    await db.query("insert into public.posts(id,title,slug,description,category,body,status,date) values ($1,'Scheduled','scheduled-check','A scheduled test','Automation','<p>Content</p>','published',current_date+1)",[id]);
+    await db.exec('set role anon');
+    assert.equal((await db.query('select * from public.posts where id=$1',[id])).rows.length,0);
+    await db.exec('reset role');
+    await db.query('update public.posts set date=current_date where id=$1',[id]);
+    await db.exec('set role anon');
+    assert.equal((await db.query('select * from public.posts where id=$1',[id])).rows.length,1);
+  } finally { await db.exec('reset role'); await db.query('delete from public.posts where id=$1',[id]); await db.exec('set role service_role'); }
+});
+
+test('image metadata reads PNG, JPEG and WebP dimensions', () => {
+  const png = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDYQAAAAASUVORK5CYII=','base64'));
+  assert.deepEqual(imageDimensions(png),{width:1,height:1});
+  const webp = new Uint8Array(30); webp.set(Buffer.from('RIFF'),0); webp.set(Buffer.from('WEBPVP8X'),8); webp[24]=99; webp[27]=49;
+  assert.deepEqual(imageDimensions(webp),{width:100,height:50});
+  const jpeg = new Uint8Array([255,216,255,192,0,8,8,0,50,0,100,0,255,217]);
+  assert.deepEqual(imageDimensions(jpeg),{width:100,height:50});
+});
+
+test('SEO catches unpublished internal links, duplicate slugs, missing descriptions and image alt text', () => {
+  const article = { ...draft(), id:randomUUID(),author:'AI Insights',date:'2026-10-07',status:'published' as const,featured:false,cover_image_url:'https://example.com/image.png',cover_image_alt:'',description:'',title:'x'.repeat(61) };
+  const other = {...article,id:randomUUID(),status:'draft' as const};
+  const issues = seoIssues(article,[article,other],{images:[{src:'image',alt:''}],links:['/blog/draft-article','https://external.example/article']},'2026-10-07');
+  for (const expected of ['Missing meta description','Title exceeds the recommended 60 characters','Missing featured-image alt text','1 inline image(s) missing alt text','Duplicate slug','Broken or unpublished internal link: /blog/draft-article']) assert.ok(issues.includes(expected), expected);
+  assert.equal(issues.length,6);
+  const healthy = {...article,title:'Healthy title',description:'A useful description',cover_image_alt:'Meaningful alt'};
+  assert.deepEqual(seoIssues(healthy,[healthy],{images:[],links:[`/blog/${healthy.slug}`]},'2026-10-07'),[]);
 });

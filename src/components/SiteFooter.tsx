@@ -1,7 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { SITE, categories } from "@/lib/posts";
+import { SITE, categories as defaultCategories } from "@/lib/posts";
 
-export function SiteFooter() {
+export function SiteFooter({
+  site = SITE,
+  categories = [...defaultCategories],
+}: {
+  site?: typeof SITE;
+  categories?: string[];
+}) {
   return (
     <footer className="mt-20 border-t border-border bg-surface">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-4">
@@ -10,10 +16,10 @@ export function SiteFooter() {
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient text-sm font-bold text-primary-foreground">
               AI
             </span>
-            <span className="font-display text-base font-semibold">{SITE.name}</span>
+            <span className="font-display text-base font-semibold">{site.name}</span>
           </div>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">
-            {SITE.description}
+            {site.description}
           </p>
           <p className="mt-4 text-sm text-muted-foreground">{SITE.domain}</p>
         </div>
@@ -59,7 +65,7 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-border px-4 py-6 text-center text-xs text-muted-foreground sm:px-6">
-        © {new Date().getFullYear()} {SITE.name}. All rights reserved.
+        © {new Date().getFullYear()} {site.name}. All rights reserved.
       </div>
     </footer>
   );

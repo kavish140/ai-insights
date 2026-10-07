@@ -9,3 +9,8 @@ export const getPublicConfiguration = createServerFn({ method: "GET" }).handler(
   const { publicConfiguration } = await import("./supabase.server");
   return publicConfiguration();
 });
+
+export const getSiteContent = createServerFn({ method: "GET" }).handler(async () => {
+  const { siteContent } = await import("./supabase.server");
+  return siteContent();
+});

@@ -65,6 +65,59 @@ the empty homepage. It does not write to your Supabase project.
 
 The Contact form and advertising placements remain placeholders.
 
+## Basic admin
+
+`/admin` opens the publishing dashboard after sign-in with a designated admin account.
+It includes post totals and latest posts; search, category/status filters and sorting;
+publish/unpublish, live links and confirmed deletion; an HTML correction editor with
+featured-image selection; category creation, renaming and deletion; a media library
+with uploads, credits, alt text and unused-image deletion; and public site settings.
+MCP remains the normal publishing workflow. Revision checks prevent overwriting newer edits.
+
+Apply `supabase/migrations/20261007043618_basic_admin.sql` after the existing migrations
+before deploying this admin. It adds categories and settings with RLS, a designated-admin
+access check, and admin-only media storage policies. Category renames update associated posts;
+categories still used by posts and images still referenced by posts cannot be deleted.
+Uploads accept PNG/JPEG/WebP up to 4 MiB and use the same hashed paths as MCP uploads.
+Deploy the updated `blog-mcp` function alongside the app so `get_site_context` and
+article schemas support the managed categories. The generated dashboard deployment file
+is refreshed with `node scripts/prepare-mcp-dashboard.mjs`.
+
+Settings update the public header/footer, homepage tagline and description, and default
+site metadata. The canonical domain and page-specific editorial metadata remain defined
+in code. The default author applies to new emergency drafts.
+
+## Good admin
+
+The next tier adds MCP Activity and SEO sections, weekly/monthly publication totals,
+scheduled posts, category distribution, recent MCP-created posts, post duplication,
+sanitized previews and revision snapshots, and image dimensions/WebP optimization.
+Manual future-dated publication schedules visibility for that UTC date without a cron job.
+MCP retains its existing rule against future-dated publication.
+
+Run `supabase/migrations/20261007051335_good_admin.sql` once, after the Basic admin
+migration, in project `gutvbukqlqutjwlbmfpr`. It adds admin-readable operation logs,
+immutable revision snapshots, and optional image dimensions. Existing posts receive
+a baseline snapshot; versions from before this migration cannot be reconstructed.
+Deleted posts retain their snapshots for auditing.
+
+Regenerate `supabase/dashboard/blog-mcp.ts` with `node scripts/prepare-mcp-dashboard.mjs`
+and deploy it to the existing `blog-mcp` function. Keep its existing authentication
+configuration. `/health` reports version `2.1.0`, database availability, and whether
+operation logging is configured. Success/failure history starts with this deployment;
+the earlier database publishing audit remains visible. Logs redact image base64 and
+credential fields. Failed supported operations retry the exact original arguments,
+UUID and revision after admin confirmation; stale revisions still fail. Image uploads
+must be retried with their original bytes because logs do not retain files.
+
+Admin-only server functions validate the current Supabase user and designated-admin
+access before preview, health, live SEO or retry actions. Preview uses public-page
+HTML sanitization. Loading a revision creates unsaved draft corrections, requiring
+review and save; it cannot silently republish an old version. WebP optimization adds
+a smaller copy while keeping the source file and existing article references.
+SEO reports local metadata/image/internal-link issues, with explicit deployed-site
+checks for canonical URLs, BlogPosting data and sitemap status.
+
 ## Blog MCP
 
 The Supabase Edge Function `blog-mcp` lets Claude manage drafts and publish on

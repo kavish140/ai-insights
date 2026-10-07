@@ -1,8 +1,8 @@
 import { socialMeta } from "@/lib/social-meta";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
-import { SITE, categories } from "@/lib/posts";
+import { SITE } from "@/lib/posts";
 import { listPublishedPosts } from "@/lib/post-functions";
 
 type BlogSearch = { category?: string | undefined };
@@ -33,6 +33,7 @@ export const Route = createFileRoute("/blog/")({
 });
 
 function BlogIndex() {
+  const { categories } = useLoaderData({ from: "__root__" });
   const { category } = Route.useSearch();
   const all = Route.useLoaderData();
   const list = category ? all.filter((p) => p.category === category) : all;

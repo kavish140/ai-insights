@@ -3,6 +3,24 @@ import { createClient } from "@supabase/supabase-js";
 import sanitizeHtml from "sanitize-html";
 import type { Post } from "./posts";
 import { isBlogImageUrl } from "./blog-images";
+import { SITE, categories } from "./posts";
+
+export async function siteContent() {
+  const client = publicClient();
+  const [settings, topics] = await Promise.all([
+    client.from("site_settings").select("name,tagline,description").single(),
+    client.from("categories").select("name").order("name"),
+  ]);
+  // Older deployments can serve their existing branding until the admin migration is applied.
+  if (settings.error && settings.error.code !== "PGRST205")
+    throw new Error("Could not load site settings.");
+  if (topics.error && topics.error.code !== "PGRST205")
+    throw new Error("Could not load categories.");
+  return {
+    site: { ...SITE, ...settings.data },
+    categories: topics.data?.map((topic) => topic.name) ?? [...categories],
+  };
+}
 
 export function publicConfiguration() {
   const url = process.env["SUPABASE_URL"];

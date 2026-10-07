@@ -1,8 +1,8 @@
 import { socialMeta } from "@/lib/social-meta";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
-import { SITE, categories } from "@/lib/posts";
+import { SITE } from "@/lib/posts";
 import { listPublishedPosts } from "@/lib/post-functions";
 
 export const Route = createFileRoute("/")({
@@ -28,6 +28,7 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
+  const { site, categories } = useLoaderData({ from: "__root__" });
   const all = Route.useLoaderData();
   const featured = all.find((p) => p.featured) ?? all[0];
   const rest = all.filter((p) => p.slug !== featured?.slug);
@@ -37,13 +38,13 @@ function HomePage() {
       <section className="bg-hero border-b border-border">
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 md:py-28">
           <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-3 py-1 text-xs font-medium text-muted-foreground">
-            New articles every week
+            {site.tagline}
           </span>
           <h1 className="mt-6 max-w-3xl text-4xl font-bold leading-[1.1] md:text-6xl">
             AI automation, <span className="text-brand-gradient">explained without the hype</span>
           </h1>
           <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-            {SITE.description}
+            {site.description}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link

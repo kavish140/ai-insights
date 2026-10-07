@@ -23,6 +23,29 @@ let coverEnabled = true;
 let queries = 0;
 const database = createServer((request, response) => {
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname === "/rest/v1/site_settings") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        name: "Configured Insights",
+        tagline: "Practical AI automation, explained clearly",
+        description: "An article rendered by the server.",
+      }),
+    );
+    return;
+  }
+  if (url.pathname === "/rest/v1/categories") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify([
+        { name: "Automation" },
+        { name: "Awareness" },
+        { name: "Strategy" },
+        { name: "Custom topic" },
+      ]),
+    );
+    return;
+  }
   if (url.pathname !== "/rest/v1/posts") {
     response.writeHead(404).end();
     return;
@@ -97,6 +120,8 @@ try {
     const response = await fetch(`http://127.0.0.1:8787${path}`);
     assert.equal(response.status, 200);
     const html = await response.text();
+    assert.ok(html.includes("Configured Insights"), "Public branding uses persisted settings");
+    assert.ok(html.includes("Custom topic"), "Managed categories appear on public pages");
     assert.ok(metaContent(html, "property", "og:title"));
     assert.ok(metaContent(html, "property", "og:description"));
     assert.equal(
