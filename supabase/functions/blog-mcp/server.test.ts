@@ -12,6 +12,7 @@ import { checkableUrl, contentFindings } from '../../../src/lib/content-health.t
 import { operationMetrics } from '../../../src/lib/operation-metrics.ts';
 import { inspectContent } from '../../../src/lib/content-scanner.server.ts';
 import type { Operation } from '../../../src/lib/admin-operations.ts';
+import { readPreferences, resolvePreferences, completionEstimate, rate } from '../../../src/lib/reader-preferences.ts';
 
 const db = new PGlite();
 const storedImages = new Map<string, Uint8Array>();
@@ -43,9 +44,18 @@ before(async () => {
   await db.exec(await readFile(new URL('20261007082552_expanded_site_settings.sql', migrations), 'utf8'));
 
   await db.exec(await readFile(new URL('20261007115755_reader_discovery.sql', migrations), 'utf8'));
+  await db.exec(await readFile(new URL('20261007154319_personalized_reading_quality_tags.sql', migrations), 'utf8'));
   await db.exec('set role service_role');
 });
 after(async () => { await db.close(); });
+
+test('saved interests recover from malformed storage and resolve merged names', () => {
+  assert.deepEqual(readPreferences('broken'),{topics:[],audiences:[]});
+  assert.deepEqual(readPreferences(JSON.stringify({topics:[' AI Agents ','ai agents',4,'x'.repeat(41)],audiences:['Developers']})),{topics:['ai agents'],audiences:['developers']});
+  assert.deepEqual(resolvePreferences({topics:['old topic','new topic'],audiences:[]},[{kind:'topic',alias:'old topic',name:'new topic'}]),{topics:['new topic'],audiences:[]});
+  assert.equal(completionEstimate(29,100),false); assert.equal(completionEstimate(30,89),false); assert.equal(completionEstimate(30,90),true);
+  assert.equal(rate(0,0),'—'); assert.equal(rate(1,4),'25%');
+});
 
 test('reader tags survive MCP edits and reject invalid tag values', async () => {
   const created = await call('create_draft', { ...draft(), tags: [' Workflows ', 'workflows'], audience_tags: ['Beginners'] });
@@ -117,6 +127,11 @@ const client = createClient('http://database.invalid', 'test-server-credential',
       if (url.pathname.endsWith('/mcp_controls')) {
         const { rows } = await db.query('select * from public.mcp_controls');
         return Response.json(rows[0]);
+      }
+      if (url.pathname.endsWith('/reader_tags') || url.pathname.endsWith('/reader_tag_aliases')) {
+        const table=url.pathname.endsWith('/reader_tags') ? 'reader_tags' : 'reader_tag_aliases';
+        const {rows}=await db.query('select * from public.'+table);
+        return Response.json(rows);
       }
       if (url.pathname.endsWith('/site_settings')) {
         const { rows } = await db.query('select * from public.site_settings');
@@ -656,5 +671,82 @@ test('expanded settings enforce admin access, constraints, revision conflicts an
     await db.query('update public.site_settings set newsletter_enabled=true,home_latest_count=6');
     await db.query("select set_config('request.jwt.claim.sub','',false)");
     await db.exec('set role service_role');
+  }
+});
+
+
+test('tag merges preserve old links, draft privacy, revisions and saved interests', async () => {
+  await db.exec('reset role');
+  const admin=randomUUID(), id=randomUUID(), hiddenId=randomUUID(), slug='tag-'+id;
+  const old='topic-'+id.slice(0,8), newer='merged-'+id.slice(0,8), latest='final-'+id.slice(0,8), secret='private-'+id.slice(0,8);
+  await db.query('insert into auth.users(id) values($1)',[admin]);
+  await db.query('insert into public.admin_users(user_id) values($1)',[admin]);
+  try {
+    await db.query("insert into public.posts(id,slug,title,description,category,author,date,body,status,tags,audience_tags) values($1,$2,'Personalized article','Personalized description','Automation','AI Insights',current_date,'<p>Article</p>','published',$3,array['developers'])",[id,slug,[old,newer]]);
+    await db.query("insert into public.posts(id,slug,title,description,category,author,date,body,status,tags) values($1,$2,'Private article','Private description','Automation','AI Insights',current_date,'<p>Draft</p>','draft',$3)",[hiddenId,'hidden-'+hiddenId,[secret]]);
+    await db.query("select set_config('request.jwt.claim.sub','',false)");
+    await db.exec('set role anon');
+    assert.equal((await db.query('select * from public.reader_tags where name=$1',[secret])).rows.length,0);
+    await assert.rejects(db.query("select public.manage_reader_tag('topic','merge',$1,$2)",[old,newer]),/permission denied/);
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query("select public.manage_reader_tag('topic','merge',$1,$2)",[old,newer]),/Admin access required/);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]);
+    const before=(await db.query<{revision:number}>('select revision from public.posts where id=$1',[id])).rows[0].revision;
+    assert.equal((await db.query<{n:number}>("select public.manage_reader_tag('topic','merge',$1,$2) n",[old,newer])).rows[0].n,1);
+    assert.deepEqual((await db.query<{tags:string[];revision:number}>('select tags,revision from public.posts where id=$1',[id])).rows[0],{tags:[newer],revision:before+1});
+    await assert.rejects(db.query("select public.manage_reader_tag('topic','delete',$1)",[newer]),/still used/);
+    await db.query("select public.manage_reader_tag('topic','merge',$1,$2)",[newer,latest]);
+    await db.exec('set role anon'); await db.query("select set_config('request.jwt.claim.sub','',false)");
+    assert.deepEqual((await db.query<{names:string[]}>('select public.resolve_reader_tags($1,$2) names',['topic',[old,newer]])).rows[0].names,[latest]);
+    assert.ok((await db.query<{slug:string}>('select slug from public.personalized_articles($1,$2)',[[old],[]])).rows.some(row=>row.slug===slug));
+    assert.equal((await db.query('select slug from public.personalized_articles($1,$2)',[[secret],[]])).rows.length,0);
+    await assert.rejects(db.query('select * from public.reader_tag_history'),/permission denied/);
+    await db.exec('reset role');
+    await db.query('update public.posts set tags=$1 where id=$2',[[old],id]);
+    assert.deepEqual((await db.query<{tags:string[]}>('select tags from public.posts where id=$1',[id])).rows[0].tags,[latest],'Old tags cannot be resurrected by stale clients/restored snapshots');
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]); await db.exec('set role authenticated');
+    assert.equal((await db.query('update public.posts set title=$1 where id=$2 and revision=$3 returning id',['Stale',id,before])).rows.length,0);
+    assert.equal((await db.query('select * from public.reader_tag_history where source=$1',[old])).rows.length,1);
+  } finally {
+    await db.exec('reset role'); await db.query('delete from public.posts where id=any($1)',[[id,hiddenId]]);
+    await db.query("select set_config('request.jwt.claim.sub','',false)"); await db.exec('set role service_role');
+  }
+});
+
+test('quality analytics deduplicate feedback and recommendation clicks and reject private targets', async () => {
+  await db.exec('reset role');
+  const admin=randomUUID(), source=randomUUID(), target=randomUUID(), hidden=randomUUID(), session=randomUUID();
+  const sourceSlug='quality-'+source, targetSlug='quality-'+target, hiddenSlug='quality-'+hidden;
+  await db.query('insert into auth.users(id) values($1)',[admin]); await db.query('insert into public.admin_users(user_id) values($1)',[admin]);
+  try {
+    for (const [id,slug,status] of [[source,sourceSlug,'published'],[target,targetSlug,'published'],[hidden,hiddenSlug,'draft']])
+      await db.query("insert into public.posts(id,slug,title,description,category,author,date,body,status) values($1,$2,'Quality article','Quality description','Automation','AI Insights',current_date,'<p>Quality</p>',$3)",[id,slug,status]);
+    await db.query("select set_config('request.jwt.claim.sub','',false)");await db.exec('set role anon');
+    await db.query("select public.record_article_quality($1,$2,'helpful')",[sourceSlug,session]);
+    await db.query("select public.record_article_read($1,$2,'direct','desktop',false)",[sourceSlug,session]);
+    await db.query("select public.record_article_quality($1,$2,'progress',40,false)",[sourceSlug,session]);
+    await db.query("select public.record_article_quality($1,$2,'progress',95,true)",[sourceSlug,session]);
+    await db.query("select public.record_article_quality($1,$2,'progress',10,false)",[sourceSlug,session]);
+    await db.query("select public.record_article_quality($1,$2,'helpful')",[sourceSlug,session]);
+    await db.query("select public.record_article_quality($1,$2,'unhelpful')",[sourceSlug,session]);
+    for(const clicked of [false,true,true,false]) await db.query("select public.record_recommendation($1,$2,'related',$3,$4)",[targetSlug,sourceSlug,session,clicked]);
+    await db.query("select public.record_recommendation($1,'home','personalized',$2,true)",[hiddenSlug,session]);
+    await assert.rejects(db.query('select public.reading_quality_analytics(30)'),/permission denied/);
+    await assert.rejects(db.query('select * from private.recommendation_reads'),/permission denied/);
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query('select public.reading_quality_analytics(30)'),/Admin access required/);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]);
+    await db.query("select public.record_recommendation($1,'home','personalized',$2,true)",[targetSlug,randomUUID()]);
+    const result=(await db.query<{r:{measured:number;completed:number;helpful:number;unhelpful:number;impressions:number;clicks:number;posts:{slug:string;avg_scroll:number}[]}}>('select public.reading_quality_analytics(30) r')).rows[0].r;
+    assert.equal(result.measured,1);assert.equal(result.completed,1);assert.equal(result.helpful,0);assert.equal(result.unhelpful,1);
+    assert.equal(result.impressions,1);assert.equal(result.clicks,1);assert.equal(result.posts.find(post=>post.slug===sourceSlug)?.avg_scroll,95);
+    await db.exec('reset role');
+    assert.equal((await db.query<{views:number}>('select views from public.post_readership where post_id=$1',[source])).rows[0].views,1);
+    await db.query("insert into private.recommendation_reads(target_id,source_slug,placement,session_id,day) values($1,'home','personalized',$2,current_date-91)",[target,randomUUID()]);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)",[admin]); await db.exec('set role authenticated'); await db.query('select public.reading_quality_analytics(30)');
+    await db.exec('reset role'); assert.equal((await db.query('select * from private.recommendation_reads where day<current_date-90')).rows.length,0);
+  } finally {
+    await db.exec('reset role'); await db.query('delete from public.posts where id=any($1)',[[source,target,hidden]]);
+    await db.query("select set_config('request.jwt.claim.sub','',false)"); await db.exec('set role service_role');
   }
 });

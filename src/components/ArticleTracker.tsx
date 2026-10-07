@@ -1,22 +1,15 @@
 import { useEffect } from "react";
-import { browserClient } from "@/lib/supabase-client";
+import { completionEstimate } from "@/lib/reader-preferences";
+import {
+  beginArticleRead,
+  readerSession,
+  trackArticleQuality,
+  trackReaderEvent,
+} from "@/lib/reader-tracking";
 
-// Session-scoped IDs only: no fingerprint, persistent cookie, or stored referrer URL.
 export function ArticleTracker({ slug }: { slug: string }) {
   useEffect(() => {
-    if (
-      navigator.doNotTrack === "1" ||
-      (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl ||
-      /bot|crawler|spider|headless/i.test(navigator.userAgent)
-    )
-      return;
-    let session: string;
-    try {
-      session = sessionStorage.getItem("ai-reader-session") || crypto.randomUUID();
-      sessionStorage.setItem("ai-reader-session", session);
-    } catch {
-      return;
-    }
+    if (!readerSession()) return;
     let source = "direct";
     try {
       const host = new URL(document.referrer).hostname;
@@ -29,39 +22,69 @@ export function ArticleTracker({ slug }: { slug: string }) {
               ? "other-search"
               : "external";
     } catch {
-      /* Empty referrers are direct/unknown traffic. */
+      /* An absent referrer is direct/unknown. */
     }
     const device = /Mobi|Android/i.test(navigator.userAgent) ? "mobile" : "desktop";
-    let active = true;
-    const record = async (engaged: boolean) => {
-      try {
-        const client = await browserClient();
-        if (!active) return;
-        const { data } = await client.auth.getSession();
-        if (data.session || !active) return; // Exclude signed-in admin browsing.
-        await client.rpc("record_article_read", {
-          p_slug: slug,
-          p_session: session,
-          p_source: source,
-          p_device: device,
-          p_engaged: engaged,
-        });
-      } catch {
-        /* Analytics must never interrupt reading. */
+    const ready = beginArticleRead(slug, source, device);
+    void ready.then((recorded) => {
+      if (recorded) void trackArticleQuality(slug, "progress");
+    });
+    let seconds = 0;
+    let scroll = 0;
+    let completed = false;
+    let engagedSent = false;
+    let frame = 0;
+    const progress = () => {
+      const body = document.querySelector<HTMLElement>("[data-article-body]");
+      if (!body || document.visibilityState !== "visible") return;
+      const rect = body.getBoundingClientRect();
+      const reached = Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(((window.innerHeight - rect.top) / Math.max(1, rect.height)) * 100),
+        ),
+      );
+      scroll = Math.max(scroll, reached);
+      if (!completed && completionEstimate(seconds, scroll)) {
+        completed = true;
+        void trackArticleQuality(slug, "progress", scroll, true);
       }
     };
-    void record(false);
-    let visibleSeconds = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        progress();
+      });
+    };
+    progress();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") visibleSeconds += 1;
-      if (visibleSeconds >= 30) {
-        window.clearInterval(timer);
-        void record(true);
+      if (document.visibilityState === "visible") seconds++;
+      progress();
+      if (seconds >= 30 && !engagedSent) {
+        engagedSent = true;
+        void ready.then((recorded) => {
+          if (recorded)
+            void trackReaderEvent("record_article_read", {
+              p_slug: slug,
+              p_source: source,
+              p_device: device,
+              p_engaged: true,
+            });
+        });
       }
+      if (seconds > 0 && seconds % 15 === 0 && document.visibilityState === "visible")
+        void trackArticleQuality(slug, "progress", scroll, completed);
     }, 1000);
     return () => {
-      active = false;
       window.clearInterval(timer);
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      void trackArticleQuality(slug, "progress", scroll, completed);
     };
   }, [slug]);
   return null;

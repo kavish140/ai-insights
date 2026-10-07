@@ -19,8 +19,8 @@ const fields = z.object({
   slug: z.string().max(200).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
   description: z.string().trim().min(1).max(160),
   category: z.string().trim().min(1).max(80),
-  tags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(12).optional().describe('Topics, e.g. ai agents, workflows. Use consistent tags from existing posts.'),
-  audience_tags: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(12).optional().describe('Intended readers, e.g. beginners, developers, business owners.'),
+  tags: z.array(z.string().trim().toLowerCase().min(1).max(40).refine(value => !value.includes(','), 'Use separate tags rather than commas in one tag.')).max(12).optional().describe('Topics, e.g. ai agents, workflows. Use consistent tags from existing posts.'),
+  audience_tags: z.array(z.string().trim().toLowerCase().min(1).max(40).refine(value => !value.includes(','), 'Use separate tags rather than commas in one tag.')).max(12).optional().describe('Intended readers, e.g. beginners, developers, business owners.'),
   author: z.string().trim().min(1).max(200),
   date: z.iso.date(),
   body: z.string().min(1).max(200000),
@@ -122,10 +122,15 @@ export function createServer(database: SupabaseClient, controls?: McpControls) {
       if (error) databaseError(error);
       const { data: settings, error: settingsError } = await database.from('site_settings').select('*').single();
       if (settingsError) databaseError(settingsError);
+      const { data: vocabulary, error: tagError } = await database.from('reader_tags').select('kind,name').order('kind').order('name').limit(500);
+      const { data: aliases, error: aliasError } = await database.from('reader_tag_aliases').select('kind,alias,name').order('kind').order('alias').limit(500);
+      if (tagError) databaseError(tagError);
+      if (aliasError) databaseError(aliasError);
       return ({
+      reader_vocabulary: { tags: vocabulary ?? [], aliases: aliases ?? [], list_limit: 500 },
       name: settings.name, default_author: settings.default_author, url: SITE_URL, categories: (topics ?? []).map(topic => topic.name), controls,
       limits: { title: 200, description: 160, author: 200, body: 200000, tags_per_field: 12, tag_characters: 40 },
-      reader_tags: 'Include topic tags and audience_tags for every new article. Use specific lowercase topics (ai agents, ai workflows, email) and intended readers (beginners, developers, business owners, team leaders). Reuse consistent names from list_posts. Tags drive related reading and public filters; they do not guarantee Google rankings or describe verified visitor demographics.',
+      reader_tags: 'Include topic tags and audience_tags for every new article. Use specific lowercase topics (ai agents, ai workflows, email) and intended readers (beginners, developers, business owners, team leaders). Use the canonical names in reader_vocabulary; old aliases resolve automatically. New topics are registered automatically on article saves. Tags drive related reading and public filters; they do not guarantee Google rankings or describe verified visitor demographics.',
       article_format: 'HTML paragraphs, headings h2-h4, lists, links, blockquotes, strong/em, code blocks, img, figure and figcaption. Every image must use a returned blog-images URL and meaningful alt text. No scripts, styles or embeds.',
       images: { bucket: IMAGE_BUCKET, public_before_publication: true, max_bytes: controls?.max_image_bytes ?? MAX_IMAGE_BYTES, formats: controls?.allowed_formats ?? ['png', 'jpg', 'webp'], import_hosts: IMPORT_HOSTS, workflow: 'Use upload_image or import_image_url, then set cover_image_url/cover_image_alt through create_draft or update_draft, or embed img in the body. Provide source, credit, and reuse permission. No image generation tool is provided.' },
       rules: ['Create articles as drafts.', 'Get the current revision before editing.', 'Publish or unpublish only after the human explicitly requests that action.', 'Use a new request_id for each change; reuse it for exact retries.', 'A public endpoint cannot verify who gave approval.'],

@@ -57,6 +57,21 @@ export const Route = createFileRoute("/privacy")({
           article view totals remain.
         </p>
         <p>
+          Reading-quality measurements include the furthest article-body position visible and an
+          estimated completion after at least 30 visible seconds and 90% depth. We also record your
+          optional helpfulness response and which recommendation cards were visible or clicked.
+          These records use the same tab-session identifier and are cleared when they are older than
+          90 days on subsequent analytics activity. Completion does not establish that you read or
+          understood every word.
+        </p>
+        <h2>Reading preferences</h2>
+        <p>
+          Optional topics and intended-reader choices are stored in this browser's local storage.
+          They are sent to our server to match published articles, but we do not save a personal
+          interest profile in our database. Use Edit interests or Reset interests on the homepage to
+          change or remove them. Clearing browser site data removes these preferences too.
+        </p>
+        <p>
           Browsers with Do Not Track or Global Privacy Control enabled are excluded. Closing the tab
           clears its session identifier. Article tags describe intended readers; they do not
           establish your occupation or demographic identity. Hosting providers may separately

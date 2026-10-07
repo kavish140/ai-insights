@@ -1,14 +1,52 @@
 import { Link } from "@tanstack/react-router";
 import { formatDate, type Post } from "@/lib/posts";
 import { ArticleImage } from "./ArticleImage";
+import { useEffect, useRef } from "react";
+import { trackRecommendation, type Recommendation } from "@/lib/reader-tracking";
 
-export function PostCard({ post, size = "default" }: { post: Post; size?: "default" | "large" }) {
+export function PostCard({
+  post,
+  size = "default",
+  recommendation,
+}: {
+  post: Post;
+  size?: "default" | "large";
+  recommendation?: Recommendation;
+}) {
+  const card = useRef<HTMLElement>(null);
+  const source = recommendation?.source;
+  const placement = recommendation?.placement;
+  useEffect(() => {
+    if (!source || !placement || !card.current || typeof IntersectionObserver === "undefined")
+      return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.5) &&
+          document.visibilityState === "visible"
+        ) {
+          void trackRecommendation(post.slug, { source, placement }, false);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(card.current);
+    return () => observer.disconnect();
+  }, [post.slug, source, placement]);
   return (
-    <article className="h-full">
+    <article ref={card} className="h-full">
       <Link
         to="/blog/$slug"
         params={{ slug: post.slug }}
         aria-label={`Read ${post.title}`}
+        onClick={() => {
+          if (recommendation) void trackRecommendation(post.slug, recommendation, true);
+        }}
+        onAuxClick={(event) => {
+          if (event.button === 1 && recommendation)
+            void trackRecommendation(post.slug, recommendation, true);
+        }}
         className={`group flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
           size === "large" ? "md:flex-row md:items-center md:gap-8 md:p-8" : ""
         }`}

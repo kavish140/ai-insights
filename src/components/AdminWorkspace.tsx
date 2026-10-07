@@ -30,6 +30,9 @@ import {
 import { formatDate } from "@/lib/posts";
 import { ActivityPanel } from "./admin/ActivityPanel";
 import { ArticleReview } from "./admin/ArticleReview";
+import { TagsPanel } from "./admin/TagsPanel";
+import type { ReaderTag } from "@/lib/reader-preferences";
+import { normalizeTags } from "@/lib/reader-tags";
 import { ReadersPanel } from "./admin/ReadersPanel";
 import { SeoPanel } from "./admin/SeoPanel";
 import { MediaTools } from "./admin/MediaTools";
@@ -54,6 +57,7 @@ const tabs = [
   { name: "SEO", icon: SearchCheck },
   { name: "Readers", icon: Activity },
   { name: "Categories", icon: Tags },
+  { name: "Tags", icon: Tags },
   { name: "Media", icon: Images },
   { name: "System", icon: Settings2 },
   { name: "Subscribers", icon: Mail },
@@ -73,6 +77,7 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("Overview");
   const [articles, setArticles] = useState<Article[]>([]);
+  const [tagVocabulary, setTagVocabulary] = useState<ReaderTag[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
@@ -116,16 +121,18 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
       throw new Error(
         "This account does not have admin access. Use your designated editor account.",
       );
-    const [posts, categories, images, configuration] = await Promise.all([
+    const [posts, categories, images, configuration, vocabulary] = await Promise.all([
       allRows<Article>("posts", "id"),
       allRows<{ name: string }>("categories", "name"),
       allRows<Media>("blog_images", "path"),
       client.from("site_settings").select("*").single(),
+      allRows<ReaderTag>("reader_tags", ["kind", "name"]),
     ]);
     if (configuration.error) throw configuration.error;
     setArticles(
       posts.sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title)),
     );
+    setTagVocabulary(vocabulary);
     setTopics(categories.map((item) => item.name));
     setMedia(images.sort((a, b) => b.created_at.localeCompare(a.created_at)));
     setSettings(normalizeSettings(configuration.data));
@@ -495,6 +502,7 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                 activity={activity}
               />
             )}
+            {tab === "Tags" && <TagsPanel articles={articles} run={run} />}
             {tab === "Readers" && <ReadersPanel />}
             {tab === "SEO" && <SeoPanel articles={articles} edit={edit} />}
             {tab === "Posts" && (
@@ -682,20 +690,49 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                   </Field>
                 </div>
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Topic tags (comma-separated)">
+                  <div className="text-sm font-medium">
+                    <label htmlFor="editor-topic-tags">Topic tags (comma-separated)</label>
                     <input
+                      id="editor-topic-tags"
                       className={input}
                       value={(draft.tags ?? []).join(",")}
                       placeholder="ai agents, email, workflows"
                       maxLength={600}
                       onChange={(e) => setDraft({ ...draft, tags: e.target.value.split(",") })}
                     />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {tagVocabulary
+                        .filter(
+                          (tag) =>
+                            tag.kind === "topic" &&
+                            !normalizeTags(draft.tags ?? []).includes(tag.name),
+                        )
+                        .slice(0, 10)
+                        .map((tag) => (
+                          <button
+                            type="button"
+                            key={tag.name}
+                            className="rounded-full border border-border px-2 py-1 text-xs"
+                            disabled={normalizeTags(draft.tags ?? []).length >= 12}
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                tags: [...normalizeTags(draft.tags ?? []), tag.name],
+                              })
+                            }
+                          >
+                            + {tag.name}
+                          </button>
+                        ))}
+                    </div>
                     <span className="mt-1 block text-xs text-muted-foreground">
                       Up to 12 tags, 40 characters each. Use consistent topic names.
                     </span>
-                  </Field>
-                  <Field label="Intended readers (comma-separated)">
+                  </div>
+                  <div className="text-sm font-medium">
+                    <label htmlFor="editor-audience-tags">Intended readers (comma-separated)</label>
                     <input
+                      id="editor-audience-tags"
                       className={input}
                       value={(draft.audience_tags ?? []).join(",")}
                       placeholder="beginners, developers, business owners"
@@ -704,10 +741,38 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                         setDraft({ ...draft, audience_tags: e.target.value.split(",") })
                       }
                     />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {tagVocabulary
+                        .filter(
+                          (tag) =>
+                            tag.kind === "audience" &&
+                            !normalizeTags(draft.audience_tags ?? []).includes(tag.name),
+                        )
+                        .slice(0, 10)
+                        .map((tag) => (
+                          <button
+                            type="button"
+                            key={tag.name}
+                            className="rounded-full border border-border px-2 py-1 text-xs"
+                            disabled={normalizeTags(draft.audience_tags ?? []).length >= 12}
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                audience_tags: [
+                                  ...normalizeTags(draft.audience_tags ?? []),
+                                  tag.name,
+                                ],
+                              })
+                            }
+                          >
+                            + {tag.name}
+                          </button>
+                        ))}
+                    </div>
                     <span className="mt-1 block text-xs text-muted-foreground">
                       Who will benefit from this article? Up to 12 audience tags.
                     </span>
-                  </Field>
+                  </div>
                 </div>
                 <Field label="Search summary">
                   <textarea

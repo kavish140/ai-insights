@@ -170,6 +170,10 @@ Verification: `npm run check`, `npm run build`, `node scripts/smoke-ssr.mjs`, an
 
 ## Blog MCP
 
+Personalized reading adds saved browser interests, reading-quality analytics and an admin tag
+library with rename/merge support. Follow [the setup guide](docs/personalized-reading.md) for
+the additional SQL migration and complete dashboard Edge Function before deploying this update.
+
 Reader discovery adds editable topic/audience tags, tag filters and most-read sorting,
 related recommendations ranked by shared tags then views, and an admin Readers dashboard.
 It also exposes tags in server-rendered article content and structured data and adds a

@@ -6,6 +6,7 @@ import { SITE } from "@/lib/posts";
 import { getHomeArticles } from "@/lib/post-functions";
 import { ReadingPath } from "@/components/ReadingPath";
 import { Newsletter } from "@/components/Newsletter";
+import { PersonalizedReading } from "@/components/PersonalizedReading";
 
 export const Route = createFileRoute("/")({
   loader: () => getHomeArticles(),
@@ -87,6 +88,7 @@ function HomePage() {
       </section>
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <PersonalizedReading />
         <section className="py-10">
           <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Featured

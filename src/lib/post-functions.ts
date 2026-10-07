@@ -1,6 +1,22 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
+export const getReaderVocabulary = createServerFn({ method: "GET" }).handler(async () => {
+  const { readerVocabulary } = await import("./supabase.server");
+  return readerVocabulary();
+});
+export const getPersonalizedArticles = createServerFn({ method: "GET" })
+  .validator(
+    z.object({
+      topics: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(12),
+      audiences: z.array(z.string().trim().toLowerCase().min(1).max(40)).max(12),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { personalizedArticles } = await import("./supabase.server");
+    return personalizedArticles(data);
+  });
+
 export const articleSearchSchema = z.object({
   q: z.string().trim().max(100).optional(),
   category: z.string().max(100).optional(),

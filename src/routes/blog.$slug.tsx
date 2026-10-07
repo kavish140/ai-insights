@@ -1,4 +1,5 @@
 import { ArticleTracker } from "@/components/ArticleTracker";
+import { ArticleFeedback } from "@/components/ArticleFeedback";
 import { socialMeta, DEFAULT_SOCIAL_IMAGE } from "@/lib/social-meta";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
@@ -211,7 +212,12 @@ function PostPage() {
               <p className="mt-4 text-sm text-muted-foreground">{post.description}</p>
             </section>
           )}
-          <div className="prose-article max-w-[70ch]" dangerouslySetInnerHTML={{ __html: html }} />
+          <div
+            data-article-body
+            className="prose-article max-w-[70ch]"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+          <ArticleFeedback key={post.slug} slug={post.slug} />
           {post.category === "Automation" && (
             <section className="mt-10 rounded-2xl border border-border bg-card p-6">
               <h2 className="text-lg font-semibold">Turn the guide into a tested workflow</h2>
@@ -254,7 +260,11 @@ function PostPage() {
               <h2 className="text-2xl font-semibold">Keep reading</h2>
               <div className="mt-6 grid gap-6 sm:grid-cols-2">
                 {related.map((p) => (
-                  <PostCard key={p.slug} post={p} />
+                  <PostCard
+                    key={p.slug}
+                    post={p}
+                    recommendation={{ source: post.slug, placement: "related" }}
+                  />
                 ))}
               </div>
             </section>

@@ -6,6 +6,38 @@ import { isBlogImageUrl } from "./blog-images";
 import { SITE, categories } from "./posts";
 import { EDITOR } from "./editorial";
 import { normalizeSettings } from "./site-settings";
+import type { ReaderPreferences, ReaderTag, TagAlias } from "./reader-preferences";
+
+export async function readerVocabulary() {
+  const client = publicClient();
+  async function pages<T>(table: string, order: string) {
+    const rows: T[] = [];
+    for (let start = 0; ; start += 500) {
+      const { data, error } = await client
+        .from(table)
+        .select("*")
+        .order("kind")
+        .order(order)
+        .range(start, start + 499);
+      if (error) throw new Error("Reader interests are unavailable.");
+      rows.push(...(data as T[]));
+      if (data.length < 500) return rows;
+    }
+  }
+  const [tags, aliases] = await Promise.all([
+    pages<ReaderTag>("reader_tags", "name"),
+    pages<TagAlias>("reader_tag_aliases", "alias"),
+  ]);
+  return { tags, aliases };
+}
+export async function personalizedArticles(preferences: ReaderPreferences): Promise<Post[]> {
+  const { data, error } = await publicClient().rpc("personalized_articles", {
+    p_topics: preferences.topics,
+    p_audiences: preferences.audiences,
+  });
+  if (error) throw new Error("Could not load personalized articles.");
+  return ((data ?? []) as PostRow[]).map(toPost);
+}
 
 export async function loadSiteSettings(client = publicClient()) {
   const { data, error } = await client.from("site_settings").select("*").single();
@@ -173,8 +205,22 @@ export async function articlePage(input: ArticleSearch) {
     .eq("status", "published")
     .lte("date", new Date().toISOString().slice(0, 10));
   if (input.category) query = query.eq("category", input.category);
-  if (input.tag) query = query.contains("tags", [input.tag]);
-  if (input.audience) query = query.contains("audience_tags", [input.audience]);
+  if (input.tag) {
+    const resolved = await publicClient().rpc("resolve_reader_tags", {
+      p_kind: "topic",
+      p_names: [input.tag],
+    });
+    if (resolved.error) throw new Error("Could not resolve topic tag.");
+    query = query.contains("tags", resolved.data);
+  }
+  if (input.audience) {
+    const resolved = await publicClient().rpc("resolve_reader_tags", {
+      p_kind: "audience",
+      p_names: [input.audience],
+    });
+    if (resolved.error) throw new Error("Could not resolve audience tag.");
+    query = query.contains("audience_tags", resolved.data);
+  }
   // Escape PostgREST grammar and LIKE wildcards; the query is a literal phrase.
   const phrase = input.q?.replace(/[^\p{L}\p{N}\s-]/gu, " ").trim();
   if (phrase) query = query.or(`title.ilike.%${phrase}%,description.ilike.%${phrase}%`);

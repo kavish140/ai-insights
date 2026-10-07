@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { browserClient } from "@/lib/supabase-client";
 import { messageFor } from "@/lib/admin";
 import { Link } from "@tanstack/react-router";
+import { ReadingQuality } from "./ReadingQuality";
 
 type Breakdown = { label?: string; tag?: string; views: number };
 type Report = {
@@ -76,6 +77,7 @@ export function ReadersPanel() {
       </div>
       {loading && <p role="status">Loading readership…</p>}
       {error && <p role="alert">{error}</p>}
+      <ReadingQuality days={days} refresh={refresh} />
       {report && (
         <>
           <div className="grid gap-4 sm:grid-cols-3">

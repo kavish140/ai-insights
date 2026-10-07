@@ -30,7 +30,59 @@ let empty = false;
 let coverEnabled = true;
 let queries = 0;
 const database = createServer((request, response) => {
+  response.setHeader("access-control-allow-origin", "http://127.0.0.1:8787");
+  response.setHeader(
+    "access-control-allow-headers",
+    "authorization, apikey, content-type, x-client-info",
+  );
+  response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+  if (request.method === "OPTIONS") {
+    response.setHeader(
+      "access-control-allow-headers",
+      request.headers["access-control-request-headers"] || "content-type",
+    );
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname === "/rest/v1/reader_tags" || url.pathname === "/rest/v1/reader_tag_aliases") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify(
+        url.pathname.endsWith("reader_tags")
+          ? [
+              { kind: "topic", name: "workflows" },
+              { kind: "audience", name: "beginners" },
+            ]
+          : [],
+      ),
+    );
+    return;
+  }
+  if (url.pathname === "/rest/v1/rpc/resolve_reader_tags") {
+    let body = "";
+    request.on("data", (chunk) => (body += chunk));
+    request.on("end", () => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(JSON.parse(body).p_names));
+    });
+    return;
+  }
+  if (url.pathname === "/rest/v1/rpc/personalized_articles") {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(empty ? [] : [article]));
+    return;
+  }
+  if (
+    ["record_article_read", "record_article_quality", "record_recommendation"].some(
+      (rpc) => url.pathname === `/rest/v1/rpc/${rpc}`,
+    )
+  ) {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end("null");
+    return;
+  }
   if (url.pathname === "/rest/v1/site_settings") {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(
@@ -310,6 +362,11 @@ try {
   const noMatch = await (await fetch("http://127.0.0.1:8787/blog?q=notfound")).text();
   assert.ok(noMatch.includes("No articles match these filters"));
   const homepage = await (await fetch("http://127.0.0.1:8787/")).text();
+  assert.ok(homepage.includes("Reading for you"));
+  assert.ok(homepage.includes("Choose interests"));
+  const qualityArticle = await (await fetch("http://127.0.0.1:8787/blog/ssr-check")).text();
+  assert.ok(qualityArticle.includes("Was this article helpful?"));
+  assert.ok(qualityArticle.includes("data-article-body"));
   assert.ok(homepage.indexOf("Featured") < homepage.indexOf("Advertisement"));
   assert.ok(homepage.includes("start-here"));
   assert.equal([...homepage.matchAll(/aria-label="Read /g)].length, 7);
@@ -339,6 +396,14 @@ try {
   console.log(
     "Passed: Worker SSR, public metadata/privacy, cover/fallback previews, sanitization, article navigation/checklists, unavailable contact, search/filters/pagination, homepage limits, sitemap, 404, admin shell, and empty homepage.",
   );
+  if (process.env.READER_BROWSER_CHECK === "1") {
+    empty = false;
+    expanded = false;
+    customSettings = false;
+    coverEnabled = true;
+    console.log("Reader browser fixture ready at http://127.0.0.1:8787 (Ctrl+C to stop)");
+    await new Promise((resolve) => process.once("SIGINT", resolve));
+  }
 } finally {
   worker.kill();
   database.close();
