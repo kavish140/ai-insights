@@ -64,8 +64,8 @@ SSR article HTML, metadata, sanitization, the sitemap, a 404, the admin shell, a
 the empty homepage. It does not write to your Supabase project.
 
 The public site includes search, sorting, pagination, a beginner reading path,
-article navigation, workflow checklists and editorial/privacy pages. Contact and
-newsletter forms use Resend and remain explicitly unavailable until configured.
+article navigation, workflow checklists and editorial/privacy pages. Contact delivery
+uses Resend; newsletter signups are stored in Supabase with admin-only reads.
 SiteNova house advertisements follow editorial content.
 See `docs/public-site-plan.md` for the implementation phases and
 `docs/email-setup.md` for activation instructions.

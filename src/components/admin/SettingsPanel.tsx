@@ -38,7 +38,7 @@ export function SettingsPanel({
   const [checkingConnections, setCheckingConnections] = useState(true);
   const [connections, setConnections] = useState<{
     resendConfigured: boolean;
-    segmentConfigured: boolean;
+    newsletterStorageConfigured: boolean;
     contactConfigured: boolean;
   } | null>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(siteSettingsSchema.parse(settings));
@@ -307,7 +307,7 @@ export function SettingsPanel({
             (
               [
                 ["Resend API", connections.resendConfigured],
-                ["Newsletter segment", connections.segmentConfigured],
+                ["Newsletter storage (Supabase)", connections.newsletterStorageConfigured],
                 ["Contact delivery", connections.contactConfigured],
               ] as const
             ).map(([label, configured]) => (

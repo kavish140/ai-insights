@@ -6,14 +6,13 @@ export const getSubscribers = createServerFn({ method: "POST" })
   .validator(
     credentials.extend({
       cursor: z.string().uuid().optional(),
-      accountWide: z.boolean().default(false),
     }),
   )
   .handler(async ({ data }) => {
     const { adminClient } = await import("./admin-operations.server");
-    await adminClient(data.token);
-    const { subscriberPage } = await import("./resend-subscribers.server");
-    return subscriberPage(process.env, data.cursor, data.accountWide);
+    const client = await adminClient(data.token);
+    const { newsletterSubscriberPage } = await import("./newsletter-storage");
+    return newsletterSubscriberPage(client, data.cursor);
   });
 export const getEmailConfiguration = createServerFn({ method: "POST" })
   .validator(credentials)
@@ -22,7 +21,9 @@ export const getEmailConfiguration = createServerFn({ method: "POST" })
     await adminClient(data.token);
     return {
       resendConfigured: !!process.env["RESEND_API_KEY"],
-      segmentConfigured: !!process.env["RESEND_SEGMENT_ID"],
+      newsletterStorageConfigured: !!(
+        process.env["SUPABASE_URL"] && process.env["SUPABASE_PUBLISHABLE_KEY"]
+      ),
       contactConfigured: !!(
         process.env["RESEND_API_KEY"] &&
         process.env["CONTACT_FROM"] &&

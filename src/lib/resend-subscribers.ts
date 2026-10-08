@@ -13,7 +13,7 @@ export type Subscriber = z.infer<typeof contact>;
 export type SubscriberPage = {
   available: boolean;
   canViewAccount: boolean;
-  scope: "segment" | "account" | "unconfigured";
+  scope: "segment" | "account" | "unconfigured" | "supabase";
   contacts: Subscriber[];
   hasMore: boolean;
   nextCursor: string | null;

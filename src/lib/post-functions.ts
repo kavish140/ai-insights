@@ -64,7 +64,7 @@ export const getSiteContent = createServerFn({ method: "GET" }).handler(async ()
     ...content,
     engagement: {
       contact: configured.contact && content.site.contact_form_enabled,
-      newsletter: configured.newsletter && content.site.newsletter_enabled,
+      newsletter: content.site.newsletter_enabled,
     },
   };
 });

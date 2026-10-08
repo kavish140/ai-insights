@@ -7,7 +7,6 @@ const button = "rounded-lg border border-border px-3 py-2 text-sm disabled:opaci
 export function SubscribersPanel() {
   const [contacts, setContacts] = useState<Subscriber[]>([]);
   const [result, setResult] = useState<SubscriberPage | null>(null);
-  const [accountWide, setAccountWide] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
@@ -18,7 +17,7 @@ export function SubscribersPanel() {
     void (async () => {
       try {
         const data = await getSubscribers({
-          data: { token: await adminToken(), accountWide: false },
+          data: { token: await adminToken() },
         });
         if (active) {
           setResult(data);
@@ -34,7 +33,7 @@ export function SubscribersPanel() {
       active = false;
     };
   }, []);
-  async function load(more = false, wide = accountWide) {
+  async function load(more = false) {
     setLoading(true);
     setMessage("");
     try {
@@ -42,11 +41,9 @@ export function SubscribersPanel() {
         data: {
           token: await adminToken(),
           cursor: more ? (result?.nextCursor ?? undefined) : undefined,
-          accountWide: wide,
         },
       });
       setResult(data);
-      setAccountWide(wide);
       setContacts((current) => [
         ...new Map(
           (more ? [...current, ...data.contacts] : data.contacts).map((contact) => [
@@ -86,11 +83,9 @@ export function SubscribersPanel() {
     <section className="space-y-5 rounded-2xl border border-border bg-card p-5 sm:p-6">
       <div className="flex flex-wrap justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">
-            {result?.scope === "account" ? "Resend contacts" : "Newsletter subscribers"}
-          </h2>
+          <h2 className="text-xl font-semibold">Newsletter subscribers</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Read-only list from Resend. Unsubscribed contacts are marked so they can be excluded
+            Read-only list from Supabase. Unsubscribed contacts are marked so they can be excluded
             from campaigns.
           </p>
         </div>
@@ -104,16 +99,6 @@ export function SubscribersPanel() {
           {message}
         </p>
       )}
-      {result?.scope !== "account" && result?.canViewAccount && (
-        <button className={button} disabled={loading} onClick={() => void load(false, true)}>
-          View all Resend contacts
-        </button>
-      )}
-      {result?.scope === "account" && (
-        <button className={button} disabled={loading} onClick={() => void load(false, false)}>
-          Back to newsletter subscribers
-        </button>
-      )}
       {result?.available && (
         <>
           <p className="text-sm">
@@ -124,9 +109,8 @@ export function SubscribersPanel() {
           </p>
           {!contacts.length && (
             <p role="status" className="rounded-lg bg-secondary p-3 text-sm">
-              {result.scope === "segment"
-                ? "No contacts were found in the configured newsletter segment. Earlier signups may be in the account-wide list. Choose View all Resend contacts to check, then use Resend to add the appropriate contacts to your newsletter segment."
-                : "No contacts were found in this Resend account. Check that the website uses the same Resend account where your subscribers are stored."}
+              No newsletter signups have been stored yet. New subscriptions appear here
+              automatically. Existing Resend contacts need to be imported separately.
             </p>
           )}
           <div className="flex flex-wrap gap-3">
@@ -211,14 +195,13 @@ export function SubscribersPanel() {
             </button>
             {result.hasMore && (
               <button className={button} disabled={loading} onClick={() => void load(true)}>
-                {loading ? "Loading…" : "Load more from Resend"}
+                {loading ? "Loading…" : "Load more subscribers"}
               </button>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Contact creation time may precede newsletter signup. Status comes from Resend and does
-            not imply double opt-in verification. CSV exports include only the filtered contacts
-            loaded here.
+            Signup time and subscription status come from Supabase. Consent does not imply double
+            opt-in verification. CSV exports include only the filtered contacts loaded here.
           </p>
         </>
       )}

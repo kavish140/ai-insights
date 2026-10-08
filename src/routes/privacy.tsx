@@ -35,10 +35,11 @@ export const Route = createFileRoute("/privacy")({
         </p>
         <h2>Newsletter subscriptions</h2>
         <p>
-          When subscriptions are enabled, your email address is stored in Resend’s contacts system
-          for AI Insights newsletters. Subscribe only with an address you own. You can unsubscribe
-          using the link in each newsletter or ask us to remove your details by email. We do not
-          sell the subscriber list.
+          When subscriptions are enabled, your email address and consent time are stored in Supabase
+          for AI Insights newsletters and are accessible only to designated administrators.
+          Addresses may be exported to our email provider when sending newsletters. Subscribe only
+          with an address you own. You can unsubscribe using the link in each newsletter or ask us
+          to remove your details by email. We do not sell the subscriber list.
         </p>
         <h2>Spam prevention and hosting</h2>
         <p>

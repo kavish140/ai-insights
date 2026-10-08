@@ -17,9 +17,9 @@ export const sendContact = createServerFn({ method: "POST" })
 export const subscribeNewsletter = createServerFn({ method: "POST" })
   .validator(newsletterSchema)
   .handler(async ({ data }) => {
-    const { loadSiteSettings } = await import("./supabase.server");
+    const { loadSiteSettings, publicClient } = await import("./supabase.server");
     if (!(await loadSiteSettings()).newsletter_enabled)
       return { ok: false, message: "New newsletter subscriptions are currently paused." };
-    const { deliverEngagement } = await import("./email-delivery");
-    return deliverEngagement("newsletter", data, process.env);
+    const { saveNewsletterSubscription } = await import("./newsletter-storage");
+    return saveNewsletterSubscription(data, publicClient());
   });
