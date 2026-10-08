@@ -37,6 +37,11 @@ const first = await subscriberPage(env, undefined, false, async (url, options) =
   return Response.json({ data: [contact], has_more: true });
 });
 assert.equal(first.scope, "segment");
+assert.equal(
+  first.canViewAccount,
+  true,
+  "A configured segment must still allow checking older account-wide signups",
+);
 assert.equal(first.nextCursor, id);
 assert.equal(first.contacts[0].email, contact.email);
 assert.ok(!JSON.stringify(first).includes(env.RESEND_API_KEY));
@@ -60,6 +65,31 @@ const global = await subscriberPage(
 );
 assert.equal(global.scope, "account");
 assert.match(global.message, /cannot all be attributed/);
+const outsideSegment = await subscriberPage(env, undefined, true, async (url) => {
+  assert.equal(
+    url.pathname,
+    "/contacts",
+    "Explicit account scope must override the configured segment",
+  );
+  return Response.json({ data: [contact], has_more: true });
+});
+assert.equal(outsideSegment.scope, "account");
+assert.equal(outsideSegment.contacts.length, 1);
+await subscriberPage(env, outsideSegment.nextCursor, true, async (url) => {
+  assert.equal(url.pathname, "/contacts");
+  assert.equal(url.searchParams.get("after"), id);
+  return Response.json({ data: [], has_more: false });
+});
+const emptySegment = await subscriberPage(env, undefined, false, async (url) => {
+  assert.equal(
+    url.pathname,
+    `/segments/${segment}/contacts`,
+    "Returning to newsletter scope must restore segment isolation",
+  );
+  return Response.json({ data: [], has_more: false });
+});
+assert.equal(emptySegment.canViewAccount, true);
+assert.equal(emptySegment.contacts.length, 0);
 for (const status of [401, 403, 429, 500]) {
   await assert.rejects(
     subscriberPage(

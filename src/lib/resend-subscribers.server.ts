@@ -10,7 +10,7 @@ export async function subscriberPage(
 ): Promise<SubscriberPage> {
   const empty = {
     available: false,
-    canViewAccount: !!env["RESEND_API_KEY"] && !env["RESEND_SEGMENT_ID"],
+    canViewAccount: !!env["RESEND_API_KEY"],
     contacts: [],
     hasMore: false,
     nextCursor: null,
@@ -22,7 +22,7 @@ export async function subscriberPage(
       message:
         "Configure RESEND_API_KEY on the website server to view subscribers. No emails are stored in Supabase.",
     };
-  const segment = env["RESEND_SEGMENT_ID"];
+  const segment = accountWide ? undefined : env["RESEND_SEGMENT_ID"];
   if (segment && !z.string().uuid().safeParse(segment).success)
     throw new Error(
       "RESEND_SEGMENT_ID must be a valid Resend segment ID. Update the server configuration.",
@@ -72,7 +72,7 @@ export async function subscriberPage(
     throw new Error("Resend returned an invalid pagination cursor. Refresh the list.");
   return {
     available: true,
-    canViewAccount: !segment,
+    canViewAccount: true,
     scope: segment ? "segment" : "account",
     contacts: parsed.data,
     hasMore: parsed.has_more,

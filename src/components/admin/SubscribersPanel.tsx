@@ -104,9 +104,14 @@ export function SubscribersPanel() {
           {message}
         </p>
       )}
-      {result?.scope === "unconfigured" && result.canViewAccount && !result.available && (
+      {result?.scope !== "account" && result?.canViewAccount && (
         <button className={button} disabled={loading} onClick={() => void load(false, true)}>
           View all Resend contacts
+        </button>
+      )}
+      {result?.scope === "account" && (
+        <button className={button} disabled={loading} onClick={() => void load(false, false)}>
+          Back to newsletter subscribers
         </button>
       )}
       {result?.available && (
@@ -117,6 +122,13 @@ export function SubscribersPanel() {
             {contacts.filter((contact) => contact.unsubscribed).length} unsubscribed
             {result.hasMore ? " · More contacts available" : " · All contacts loaded"}
           </p>
+          {!contacts.length && (
+            <p role="status" className="rounded-lg bg-secondary p-3 text-sm">
+              {result.scope === "segment"
+                ? "No contacts were found in the configured newsletter segment. Earlier signups may be in the account-wide list. Choose View all Resend contacts to check, then use Resend to add the appropriate contacts to your newsletter segment."
+                : "No contacts were found in this Resend account. Check that the website uses the same Resend account where your subscribers are stored."}
+            </p>
+          )}
           <div className="flex flex-wrap gap-3">
             <input
               aria-label="Search loaded contacts"
@@ -170,6 +182,11 @@ export function SubscribersPanel() {
                 ))}
               </tbody>
             </table>
+            {!!contacts.length && !filtered.length && (
+              <p role="status" className="py-4 text-sm text-muted-foreground">
+                No loaded contacts match your search or status filter.
+              </p>
+            )}
           </div>
           {!filtered.length && (
             <p className="text-sm text-muted-foreground">No matching contacts.</p>

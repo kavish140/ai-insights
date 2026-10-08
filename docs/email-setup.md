@@ -24,7 +24,7 @@ References: [Resend send email](https://resend.com/docs/api-reference/emails/sen
 
 Admin → Subscribers reads contacts directly from Resend after checking the signed-in user's designated admin access. The website server needs `RESEND_API_KEY` with contact read access. A sending-only key will show a permissions error. Credentials and provider error bodies never reach the browser.
 
-When `RESEND_SEGMENT_ID` is configured, the view lists that segment. Without a segment, an explicit **View all Resend contacts** action opens the account-wide list, labelled accordingly; contacts from other websites cannot be attributed to this newsletter. Configuring a segment later does not move earlier account-wide signups into it automatically. Use Resend to place the appropriate existing contacts in the segment.
+When `RESEND_SEGMENT_ID` is configured, the view lists that segment. An explicit **View all Resend contacts** action is available with or without a segment and opens the account-wide list, labelled accordingly; contacts from other websites cannot be attributed to this newsletter. **Back to newsletter subscribers** restores the configured segment view. Configuring a segment later does not move earlier account-wide signups into it automatically. Use Resend to place the appropriate existing contacts in the segment. An empty list explains how to check for earlier signups; it does not silently change the scope.
 
 The list loads 100 contacts at a time, with **Load more from Resend** for further pages. Search, status filters and CSV export cover the contacts loaded in the view. Subscribed and unsubscribed statuses come from Resend; contact creation time may precede newsletter signup. This admin view does not send campaigns or change contacts.
 
