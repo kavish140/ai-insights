@@ -26,9 +26,11 @@ article.body =
   article.body;
 let customSettings = false;
 let expanded = false;
+let generatedCount = 26;
 let empty = false;
 let coverEnabled = true;
 let queries = 0;
+let databaseRowLimit = Infinity;
 const database = createServer((request, response) => {
   response.setHeader("access-control-allow-origin", "http://127.0.0.1:8787");
   response.setHeader(
@@ -148,7 +150,7 @@ const database = createServer((request, response) => {
       ];
   if (expanded && !empty)
     rows.push(
-      ...Array.from({ length: 26 }, (_, index) => ({
+      ...Array.from({ length: generatedCount }, (_, index) => ({
         ...article,
         slug: `guide-${index}`,
         title: `Guide ${index}`,
@@ -189,7 +191,7 @@ const database = createServer((request, response) => {
   const total = rows.length;
   const offset = Number(url.searchParams.get("offset") ?? 0);
   const limit = Number(url.searchParams.get("limit") ?? total);
-  rows = rows.slice(offset, offset + limit);
+  rows = rows.slice(offset, offset + Math.min(limit, databaseRowLimit));
   if (url.searchParams.get("select") !== "*")
     rows = rows.map((row) =>
       Object.fromEntries(Object.entries(row).filter(([key]) => key !== "body")),
@@ -251,6 +253,19 @@ try {
     const response = await fetch(`http://127.0.0.1:8787${path}`);
     assert.equal(response.status, 200);
     const html = await response.text();
+    assert.equal(
+      [...html.matchAll(/<h1\b/g)].length,
+      1,
+      "Each public page needs one primary heading",
+    );
+    assert.equal([...html.matchAll(/rel="canonical"/g)].length, 1);
+    assert.ok(html.includes(`href="https://ai-insights.sitenova.dev${path}"`));
+    assert.match(metaContent(html, "name", "robots"), /^index, follow, max-image-preview:large/);
+    for (const script of html.matchAll(
+      /<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g,
+    )) {
+      JSON.parse(script[1]);
+    }
     assert.ok(html.includes("Configured Insights"), "Public branding uses persisted settings");
     assert.ok(html.includes("Custom topic"), "Managed categories appear on public pages");
     assert.ok(metaContent(html, "property", "og:title"));
@@ -319,9 +334,23 @@ try {
   }
   const sitemap = await fetch("http://127.0.0.1:8787/sitemap.xml");
   assert.equal(sitemap.status, 200);
-  assert.ok((await sitemap.text()).includes("/blog/ssr-check"));
-  assert.equal((await fetch("http://127.0.0.1:8787/blog/unknown")).status, 404);
-  assert.equal((await fetch("http://127.0.0.1:8787/admin")).status, 200);
+  const sitemapText = await sitemap.text();
+  assert.ok(sitemapText.includes("/blog/ssr-check"));
+  assert.ok(sitemapText.includes(`<lastmod>${article.updated_at}</lastmod>`));
+  assert.ok(sitemapText.includes(`<image:loc>${imageUrl}</image:loc>`));
+  assert.ok(sitemapText.includes("/blog?category=Automation"));
+  for (const path of ["/blog/unknown", "/not-a-page", "/blog?page=10000"]) {
+    const missing = await fetch(`http://127.0.0.1:8787${path}`);
+    assert.equal(missing.status, 404);
+    assert.match(missing.headers.get("x-robots-tag"), /noindex/);
+  }
+  const admin = await fetch("http://127.0.0.1:8787/admin");
+  assert.equal(admin.status, 200);
+  assert.match(admin.headers.get("x-robots-tag"), /noindex/);
+  assert.equal(metaContent(await admin.text(), "name", "robots"), "noindex, nofollow");
+  const trailing = await fetch("http://127.0.0.1:8787/blog/?page=2", { redirect: "manual" });
+  assert.equal(trailing.status, 301);
+  assert.equal(trailing.headers.get("location"), "http://127.0.0.1:8787/blog?page=2");
   coverEnabled = false;
   const withoutCover = await fetch("http://127.0.0.1:8787/blog/ssr-check");
   const fallbackHtml = await withoutCover.text();
@@ -339,10 +368,42 @@ try {
   assert.ok(firstPage.replace(/<!--.*?-->/g, "").includes("Page 1 of 3"));
   const thirdPage = await (await fetch("http://127.0.0.1:8787/blog?page=3")).text();
   assert.equal([...thirdPage.matchAll(/aria-label="Read /g)].length, 3);
+  assert.ok(
+    thirdPage.includes('rel="canonical" href="https://ai-insights.sitenova.dev/blog?page=3"'),
+  );
+  assert.match(metaContent(thirdPage, "name", "robots"), /^index/);
+  const categoryPage = await (await fetch("http://127.0.0.1:8787/blog?category=Automation")).text();
+  assert.match(metaContent(categoryPage, "name", "robots"), /^index/);
+  assert.equal(
+    metaContent(categoryPage, "property", "og:url"),
+    "https://ai-insights.sitenova.dev/blog?category=Automation",
+  );
+  assert.ok(categoryPage.includes("Automation articles"));
+  databaseRowLimit = 7;
+  const completeSitemap = await (await fetch("http://127.0.0.1:8787/sitemap.xml")).text();
+  for (let i = 0; i < 26; i++) assert.ok(completeSitemap.includes(`/blog/guide-${i}</loc>`));
+  databaseRowLimit = Infinity;
+  generatedCount = 5001;
+  const sitemapIndex = await (await fetch("http://127.0.0.1:8787/sitemap.xml")).text();
+  assert.ok(sitemapIndex.includes("<sitemapindex"));
+  assert.ok(sitemapIndex.includes("/sitemaps/2.xml"));
+  const childSitemaps = await Promise.all(
+    [1, 2].map(async (index) => {
+      const response = await fetch(`http://127.0.0.1:8787/sitemaps/${index}.xml`);
+      assert.equal(response.status, 200);
+      return response.text();
+    }),
+  );
+  assert.equal([...childSitemaps[0].matchAll(/<url>/g)].length, 5000);
+  assert.equal([...childSitemaps.join("").matchAll(/<url>/g)].length, 5009);
+  assert.ok(childSitemaps.join("").includes("/blog/guide-5000</loc>"));
+  assert.equal((await fetch("http://127.0.0.1:8787/sitemaps/3.xml")).status, 404);
+  generatedCount = 26;
   const filtered = await (
     await fetch("http://127.0.0.1:8787/blog?category=Awareness&q=Guide%201&sort=shortest")
   ).text();
   assert.ok(filtered.includes("Guide 11"));
+  assert.equal(metaContent(filtered, "name", "robots"), "noindex, follow");
   assert.ok(!filtered.includes('aria-label="Read SSR test article"'));
   const tagged = await (
     await fetch("http://127.0.0.1:8787/blog?tag=workflows&audience=beginners&sort=popular")
@@ -353,7 +414,13 @@ try {
       tagged.indexOf('aria-label="Read Guide 25"'),
   );
   const noTag = await (await fetch("http://127.0.0.1:8787/blog?tag=unknown-topic")).text();
+  for (const category of ["constructor", "__proto__", "toString"]) {
+    const unusual = await fetch(`http://127.0.0.1:8787/blog?category=${category}`);
+    assert.equal(unusual.status, 200);
+    assert.equal(metaContent(await unusual.text(), "name", "robots"), "noindex, follow");
+  }
   assert.ok(noTag.includes("No articles match these filters"));
+  assert.equal(metaContent(noTag, "name", "robots"), "noindex, follow");
   const faviconPage = await (await fetch("http://127.0.0.1:8787/")).text();
   assert.ok(faviconPage.includes('href="/favicon.png"'));
   const icon = await fetch("http://127.0.0.1:8787/favicon.png");
@@ -394,7 +461,7 @@ try {
   assert.ok((await home.text()).includes("Our first articles are coming soon."));
   assert.ok(queries >= 6);
   console.log(
-    "Passed: Worker SSR, public metadata/privacy, cover/fallback previews, sanitization, article navigation/checklists, unavailable contact, search/filters/pagination, homepage limits, sitemap, 404, admin shell, and empty homepage.",
+    "Passed: Worker SSR, unique metadata, JSON-LD, canonical pagination, topic indexing, search noindex, redirects, error/admin noindex, complete/image/sharded sitemaps, cover/fallback previews, sanitization, article navigation, search/filters, settings and empty homepage.",
   );
   if (process.env.READER_BROWSER_CHECK === "1") {
     empty = false;

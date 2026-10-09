@@ -149,6 +149,27 @@ export async function publishedPosts(): Promise<Post[]> {
 const summaryColumns =
   "slug,title,description,category,date,updated_at,author,featured,reading_minutes,cover_image_url,cover_image_alt,tags,audience_tags,view_count";
 
+// Crawl summaries in batches so the database row limit cannot truncate the sitemap.
+// Advancing by the actual response length also handles projects with lower row limits.
+export async function crawlPosts(): Promise<Post[]> {
+  const client = publicClient();
+  const posts: Post[] = [];
+  const today = new Date().toISOString().slice(0, 10);
+  for (let offset = 0; ;) {
+    const { data, error } = await client
+      .from("article_catalog")
+      .select(summaryColumns)
+      .eq("status", "published")
+      .lte("date", today)
+      .order("slug")
+      .range(offset, offset + 499);
+    if (error) throw new Error("Could not load sitemap articles.");
+    if (!data?.length) return posts;
+    posts.push(...data.map(toPost));
+    offset += data.length;
+  }
+}
+
 type PostRow = {
   tags?: string[];
   audience_tags?: string[];

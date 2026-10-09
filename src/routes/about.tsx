@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { SITE } from "@/lib/posts";
 import { EDITOR } from "@/lib/editorial";
 import { Newsletter } from "@/components/Newsletter";
+import { jsonLd, AUTHOR_ID, WEBSITE_ID } from "@/lib/seo";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -21,6 +22,20 @@ export const Route = createFileRoute("/about")({
       }),
     ],
     links: [{ rel: "canonical", href: SITE.url + "/about" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: jsonLd({
+          "@context": "https://schema.org",
+          "@type": "AboutPage",
+          "@id": `${SITE.url}/about`,
+          url: `${SITE.url}/about`,
+          name: "About AI Insights",
+          mainEntity: { "@id": AUTHOR_ID },
+          isPartOf: { "@id": WEBSITE_ID },
+        }),
+      },
+    ],
   }),
   component: AboutPage,
 });
@@ -30,7 +45,7 @@ function AboutPage() {
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
       <h1 className="text-3xl font-bold md:text-4xl">About {SITE.name}</h1>
       <div className="prose-article mt-6">
-        <h2>Meet {EDITOR.name}</h2>
+        <h2 id="author">Meet {EDITOR.name}</h2>
         <p>{EDITOR.bio}</p>
         <p>
           {SITE.name} covers two things: how to automate real work with AI, and how to stay aware of

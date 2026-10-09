@@ -69,6 +69,8 @@ uses Resend; newsletter signups are stored in Supabase with admin-only reads.
 SiteNova house advertisements follow editorial content.
 See `docs/public-site-plan.md` for the implementation phases and
 `docs/email-setup.md` for activation instructions.
+See [docs/seo.md](docs/seo.md) for indexing behavior, sitemap coverage, SEO checks,
+Search Console setup and editorial growth priorities.
 
 ## Basic admin
 

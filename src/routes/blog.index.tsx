@@ -1,9 +1,10 @@
 import { socialMeta } from "@/lib/social-meta";
-import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useLoaderData } from "@tanstack/react-router";
 import { AdSlot } from "@/components/AdSlot";
 import { PostCard } from "@/components/PostCard";
 import { SITE } from "@/lib/posts";
 import { getArticlePage } from "@/lib/post-functions";
+import { jsonLd, listingSeo, WEBSITE_ID } from "@/lib/seo";
 
 type BlogSearch = {
   category?: string | undefined;
@@ -16,7 +17,11 @@ type BlogSearch = {
 
 export const Route = createFileRoute("/blog/")({
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => getArticlePage({ data: deps }),
+  loader: async ({ deps }) => {
+    const result = await getArticlePage({ data: deps });
+    if (result.page > 1 && !result.posts.length) throw notFound();
+    return result;
+  },
   validateSearch: (search: Record<string, unknown>): BlogSearch => ({
     category: typeof search["category"] === "string" ? search["category"].slice(0, 100) : undefined,
     q: typeof search["q"] === "string" ? search["q"].trim().slice(0, 100) : undefined,
@@ -39,23 +44,48 @@ export const Route = createFileRoute("/blog/")({
         ? Math.min(Number(search["page"]), 10000)
         : 1,
   }),
-  head: () => ({
-    meta: [
-      { title: "All Articles on AI Automation & Awareness — AI Insights" },
-      {
-        name: "description",
-        content:
-          "Every AI Insights article: automation playbooks, agent vs workflow guidance, privacy and misinformation awareness, and ROI frameworks.",
-      },
-      ...socialMeta({
-        title: "All Articles on AI Automation & Awareness — AI Insights",
-        description:
-          "Every AI Insights article: automation playbooks, agent vs workflow guidance, privacy and misinformation awareness, and ROI frameworks.",
-        path: "/blog",
-      }),
-    ],
-    links: [{ rel: "canonical", href: SITE.url + "/blog" }],
-  }),
+  head: ({ loaderData, match }) => {
+    const seo = listingSeo(match.loaderDeps, loaderData?.total === 0);
+    return {
+      meta: [
+        { title: seo.title },
+        {
+          name: "description",
+          content: seo.description,
+        },
+        { name: "robots", content: seo.robots },
+        ...socialMeta({
+          title: seo.title,
+          description: seo.description,
+          path: seo.path,
+        }),
+      ],
+      links: [{ rel: "canonical", href: seo.canonical }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: jsonLd({
+            "@context": "https://schema.org",
+            "@type": "CollectionPage",
+            "@id": seo.canonical,
+            name: seo.heading,
+            description: seo.description,
+            url: seo.canonical,
+            isPartOf: { "@id": WEBSITE_ID },
+            mainEntity: {
+              "@type": "ItemList",
+              itemListElement: (loaderData?.posts ?? []).map((post, index) => ({
+                "@type": "ListItem",
+                position: index + 1,
+                name: post.title,
+                url: `${SITE.url}/blog/${encodeURIComponent(post.slug)}`,
+              })),
+            },
+          }),
+        },
+      ],
+    };
+  },
   component: BlogIndex,
 });
 
@@ -65,14 +95,13 @@ function BlogIndex() {
   const { category } = search;
   const { posts: list, total, page, pageSize } = Route.useLoaderData();
   const navigate = Route.useNavigate();
+  const seo = listingSeo(search);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <header className="max-w-2xl">
-        <h1 className="text-3xl font-bold md:text-4xl">Articles</h1>
-        <p className="mt-3 text-muted-foreground">
-          Practical writing on AI automation and staying aware of how AI reshapes work.
-        </p>
+        <h1 className="text-3xl font-bold md:text-4xl">{seo.heading}</h1>
+        <p className="mt-3 text-muted-foreground">{seo.description}</p>
       </header>
 
       <form

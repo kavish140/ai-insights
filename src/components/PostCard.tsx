@@ -56,7 +56,7 @@ export function PostCard({
         >
           <ArticleImage
             src={post.cover_image_url}
-            alt={post.cover_image_alt}
+            alt={post.cover_image_alt || post.title}
             featured={size === "large"}
           />
         </div>

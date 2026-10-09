@@ -2,14 +2,9 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { publishedPosts } from "./lib/supabase.server";
+import { crawlPosts } from "./lib/supabase.server";
 import { SITE } from "./lib/posts";
-
-const xmlEscape = (value: string) =>
-  value.replace(
-    /[<>&"']/g,
-    (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!,
-  );
+import { sitemapEntries, sitemapXml, xmlEscape } from "./lib/seo";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -55,17 +50,33 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      if (new URL(request.url).pathname === "/sitemap.xml") {
-        const posts = await publishedPosts();
-        const paths = [
-          "/",
-          "/blog",
-          "/about",
-          "/contact",
-          "/privacy",
-          ...posts.map((p) => `/blog/${p.slug}`),
-        ];
-        const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((path) => `<url><loc>${xmlEscape(SITE.url + path)}</loc></url>`).join("")}</urlset>`;
+      const url = new URL(request.url);
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        url.pathname !== "/" &&
+        /\/$/.test(url.pathname)
+      ) {
+        url.pathname = url.pathname.replace(/\/+$/, "");
+        return new Response(null, { status: 301, headers: { location: url.href } });
+      }
+      const shard = url.pathname.match(/^\/sitemaps\/(\d+)\.xml$/);
+      if (url.pathname === "/sitemap.xml" || shard) {
+        const entries = sitemapEntries(await crawlPosts());
+        const shardSize = 5000;
+        const shardCount = Math.ceil(entries.length / shardSize);
+        const index = shard ? Number(shard[1]) : 0;
+        if (shard && (!Number.isSafeInteger(index) || index < 1 || index > shardCount)) {
+          return new Response("Sitemap not found", {
+            status: 404,
+            headers: { "x-robots-tag": "noindex" },
+          });
+        }
+        const xml =
+          !shard && entries.length > shardSize
+            ? `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${Array.from({ length: shardCount }, (_, i) => `<sitemap><loc>${xmlEscape(`${SITE.url}/sitemaps/${i + 1}.xml`)}</loc></sitemap>`).join("")}</sitemapindex>`
+            : sitemapXml(
+                shard ? entries.slice((index - 1) * shardSize, index * shardSize) : entries,
+              );
         return new Response(xml, {
           headers: {
             "content-type": "application/xml; charset=utf-8",
@@ -74,13 +85,28 @@ export default {
         });
       }
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      const response = await normalizeCatastrophicSsrResponse(
+        await handler.fetch(request, env, ctx),
+      );
+      if (
+        response.status >= 400 ||
+        url.pathname === "/admin" ||
+        url.pathname.startsWith("/admin/")
+      ) {
+        const headers = new Headers(response.headers);
+        headers.set("x-robots-tag", "noindex, nofollow");
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
+      return response;
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {
         status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },
       });
     }
   },

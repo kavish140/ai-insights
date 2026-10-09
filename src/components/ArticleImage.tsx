@@ -12,6 +12,9 @@ export function ArticleImage({
   className?: string;
 }) {
   const { imageTransforms } = useLoaderData({ from: "__root__" });
+  const sizes = featured
+    ? "(max-width: 767px) 100vw, 768px"
+    : "(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 384px";
   const transformed = (width: number) =>
     src?.replace("/object/public/", "/render/image/public/") + `?width=${width}&quality=80`;
   if (!src)
@@ -35,7 +38,7 @@ export function ArticleImage({
           ? [400, 640, 960, 1200].map((width) => `${transformed(width)} ${width}w`).join(", ")
           : undefined
       }
-      sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 800px"
+      sizes={sizes}
       loading={featured ? "eager" : "lazy"}
       fetchPriority={featured ? "high" : "auto"}
       decoding="async"

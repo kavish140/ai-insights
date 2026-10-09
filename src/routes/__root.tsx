@@ -14,6 +14,8 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SITE } from "@/lib/posts";
 import { getSiteContent } from "@/lib/post-functions";
+import { EDITOR } from "@/lib/editorial";
+import { INDEX_ROBOTS, jsonLd, ORGANIZATION_ID, WEBSITE_ID, AUTHOR_ID } from "@/lib/seo";
 
 function NotFoundComponent() {
   return (
@@ -80,7 +82,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         { title: `${site.name} — ${site.tagline}` },
         { name: "description", content: site.description },
-        { name: "author", content: "AI Insights" },
+        { name: "author", content: EDITOR.name },
+        { name: "robots", content: INDEX_ROBOTS },
         { property: "og:site_name", content: site.name },
         { property: "og:type", content: "website" },
         { property: "og:locale", content: "en_US" },
@@ -100,12 +103,43 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       scripts: [
         {
           type: "application/ld+json",
-          children: JSON.stringify({
+          children: jsonLd({
             "@context": "https://schema.org",
-            "@type": "WebSite",
-            name: site.name,
-            url: SITE.url,
-            description: site.description,
+            "@graph": [
+              {
+                "@type": "Organization",
+                "@id": ORGANIZATION_ID,
+                name: site.name,
+                url: SITE.url,
+                logo: {
+                  "@type": "ImageObject",
+                  url: `${SITE.url}/favicon.png`,
+                  width: 96,
+                  height: 96,
+                },
+                sameAs: [
+                  loaderData?.site.linkedin_url,
+                  loaderData?.site.youtube_url,
+                  loaderData?.site.x_url,
+                ].filter(Boolean),
+              },
+              {
+                "@type": "WebSite",
+                "@id": WEBSITE_ID,
+                name: site.name,
+                url: SITE.url,
+                description: site.description,
+                inLanguage: "en",
+                publisher: { "@id": ORGANIZATION_ID },
+              },
+              {
+                "@type": "Person",
+                "@id": AUTHOR_ID,
+                name: EDITOR.name,
+                url: `${SITE.url}/about`,
+                description: EDITOR.bio,
+              },
+            ],
           }),
         },
       ],

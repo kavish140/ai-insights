@@ -9,6 +9,8 @@ import { getArticle } from "@/lib/post-functions";
 import { articleOutline, articleTakeaways, checklistText } from "@/lib/article-reading";
 import { ArticleImage } from "@/components/ArticleImage";
 import { Newsletter } from "@/components/Newsletter";
+import { articleSchema, jsonLd } from "@/lib/seo";
+import { EDITOR } from "@/lib/editorial";
 
 export const Route = createFileRoute("/blog/$slug")({
   loader: async ({ params }) => {
@@ -26,15 +28,15 @@ export const Route = createFileRoute("/blog/$slug")({
       };
     }
     const { post } = loaderData;
-    const url = `${SITE.url}/blog/${params.slug}`;
+    const url = `${SITE.url}/blog/${encodeURIComponent(params.slug)}`;
     return {
       meta: [
-        { title: `${post.title} — AI Insights` },
+        { title: `${post.title} — ${SITE.name}` },
         { name: "description", content: post.description },
         ...socialMeta({
           title: post.title,
           description: post.description,
-          path: "/blog/" + params.slug,
+          path: "/blog/" + encodeURIComponent(params.slug),
           type: "article",
           image: post.cover_image_url || DEFAULT_SOCIAL_IMAGE,
           imageAlt: post.cover_image_url ? post.cover_image_alt || post.title : undefined,
@@ -48,29 +50,11 @@ export const Route = createFileRoute("/blog/$slug")({
       scripts: [
         {
           type: "application/ld+json",
-          children: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BlogPosting",
-            headline: post.title,
-            keywords: post.tags ?? [],
-            articleSection: post.category,
-            about: (post.tags ?? []).map((name) => ({ "@type": "Thing", name })),
-            audience: (post.audience_tags ?? []).map((audienceType) => ({
-              "@type": "Audience",
-              audienceType,
-            })),
-            description: post.description,
-            datePublished: post.date,
-            dateModified: post.updatedAt || post.date,
-            author: { "@type": "Person", name: post.author },
-            publisher: { "@type": "Organization", name: SITE.name },
-            mainEntityOfPage: { "@type": "WebPage", "@id": url },
-            image: post.cover_image_url || SITE.url + "/images/og-cover.jpg",
-          }),
+          children: jsonLd(articleSchema(post)),
         },
         {
           type: "application/ld+json",
-          children: JSON.stringify({
+          children: jsonLd({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             itemListElement: [
@@ -105,13 +89,28 @@ function PostPage() {
               Articles
             </Link>
           </nav>
-          <span className="mt-5 inline-block rounded-full bg-primary-soft px-2.5 py-1 text-xs font-medium text-primary">
+          <Link
+            to="/blog"
+            search={{ category: post.category }}
+            className="mt-5 inline-block rounded-full bg-primary-soft px-2.5 py-1 text-xs font-medium text-primary"
+          >
             {post.category}
-          </span>
+          </Link>
           <h1 className="mt-4 text-3xl font-bold leading-tight md:text-5xl">{post.title}</h1>
           <p className="mt-5 text-base text-muted-foreground md:text-lg">{post.description}</p>
           <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{post.author}</span>
+            {post.author === EDITOR.name ? (
+              <Link
+                to="/about"
+                hash="author"
+                rel="author"
+                className="font-medium text-foreground hover:text-primary"
+              >
+                {post.author}
+              </Link>
+            ) : (
+              <span className="font-medium text-foreground">{post.author}</span>
+            )}
             <span aria-hidden="true">·</span>
             <time dateTime={post.date}>{formatDate(post.date)}</time>
             <span aria-hidden="true">·</span>
@@ -150,7 +149,7 @@ function PostPage() {
           {post.cover_image_url && (
             <ArticleImage
               src={post.cover_image_url}
-              alt={post.cover_image_alt ?? ""}
+              alt={post.cover_image_alt || post.title}
               featured
               className="mt-8 aspect-[16/9] w-full rounded-2xl object-cover"
             />
