@@ -57,7 +57,8 @@ export function ContentPanel({
         <h2 className="text-xl font-semibold">Content health & opportunities</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Find refresh candidates and possible topic overlap. Topic similarity is a review hint.
-          Select up to five articles to check links and images on the live site.
+          Select up to five articles to check links and images on the live site. A successful link
+          response does not verify the article’s claims or establish originality.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <label className="text-sm">
