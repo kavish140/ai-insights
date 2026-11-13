@@ -8,9 +8,9 @@ const STORAGE_BASE = 'https://gutvbukqlqutjwlbmfpr.supabase.co/storage/v1/object
 const imagePath = /^articles\/[a-f0-9]{64}\.(png|jpg|webp)$/;
 export const imageDetails = {
   alt: z.string().trim().min(1).max(300),
-  source_url: z.url().max(2000).refine(value => new URL(value).protocol === 'https:', 'Use an HTTPS source page.'),
-  credit: z.string().trim().min(1).max(300),
-  license_note: z.string().trim().min(1).max(500).describe('Explain permission to reuse this image, including attribution requirements. Do not assume web images are free to reuse.'),
+  source_url: z.union([z.literal(''), z.url().max(2000).refine(value => URL.canParse(value) && new URL(value).protocol === 'https:', 'Use an HTTPS source page.')]).default('').describe('Optional HTTPS source page.'),
+  credit: z.string().trim().max(300).default('').describe('Optional image credit.'),
+  license_note: z.string().trim().max(500).default('').describe('Optional permission or license note, including attribution requirements.'),
 };
 
 export function isBlogImageUrl(value: string) {

@@ -112,7 +112,7 @@ async function write(database: SupabaseClient, tool: string, args: { request_id:
 export function createServer(database: SupabaseClient, controls?: McpControls) {
   const server = new McpServer({
     name: 'ai-insights-blog', version: '3.0.0',
-    schemaAdapter: schema => z.toJSONSchema(schema as z.ZodType),
+    schemaAdapter: schema => z.toJSONSchema(schema as z.ZodType, { io: 'input' }),
   });
 
   server.tool('get_site_context', {
@@ -139,19 +139,19 @@ export function createServer(database: SupabaseClient, controls?: McpControls) {
         'Label proposed examples and expected outputs as hypothetical. Claim execution only with retained synthetic inputs, commands, environment, observed output, failure cases and limitations. Do not invent experience, savings or client outcomes.',
         'Choose structure for the reader task. Preserve useful existing prose, human contributions, publication dates and URLs during corrections; explain material corrections. Do not use word-count targets or topic similarity as reasons for rewriting or merging.',
       ],
-      images: { bucket: IMAGE_BUCKET, public_before_publication: true, max_bytes: controls?.max_image_bytes ?? MAX_IMAGE_BYTES, formats: controls?.allowed_formats ?? ['png', 'jpg', 'webp'], import_hosts: IMPORT_HOSTS, workflow: 'Use upload_image or import_image_url, then set cover_image_url/cover_image_alt through create_draft or update_draft, or embed img in the body. Provide source, credit, and reuse permission. No image generation tool is provided.' },
+      images: { bucket: IMAGE_BUCKET, public_before_publication: true, max_bytes: controls?.max_image_bytes ?? MAX_IMAGE_BYTES, formats: controls?.allowed_formats ?? ['png', 'jpg', 'webp'], import_hosts: IMPORT_HOSTS, workflow: 'Use upload_image or import_image_url, then set cover_image_url/cover_image_alt through create_draft or update_draft, or embed img in the body. Source URL, credit, and permission/license note are optional. No image generation tool is provided.' },
       rules: ['Create articles as drafts.', 'Get the current revision before editing.', 'Publish or unpublish only after the human explicitly requests that action.', 'Use a new request_id for each change; reuse it for exact retries.', 'A public endpoint cannot verify who gave approval.'],
     }); }),
   });
 
   const images = createImageTools(database, controls);
   server.tool('upload_image', {
-    description: 'Upload PNG/JPEG/WebP bytes as raw base64 to the public blog-images bucket. Maximum 4 MiB. Requires source, credit, permission note and alt text. Content-addressed files make exact retries safe. This tool does not generate images.',
+    description: 'Upload PNG/JPEG/WebP bytes as raw base64 to the public blog-images bucket. Maximum 4 MiB. Requires alt text; source URL, credit, and permission/license note are optional. Content-addressed files make exact retries safe. This tool does not generate images.',
     inputSchema: z.object({ ...imageDetails, base64: z.string().min(4).max(Math.ceil(MAX_IMAGE_BYTES / 3) * 4) }).strict(),
     handler: safeHandler(images.upload),
   });
   server.tool('import_image_url', {
-    description: 'Import an image from an approved HTTPS image host into blog-images. Requires a direct image URL, source page, credit, permission note and alt text. No redirects; maximum 4 MiB. Do not import images without reuse permission.',
+    description: 'Import an image from an approved HTTPS image host into blog-images. Requires a direct image URL and alt text; source page, credit, and permission/license note are optional. No redirects; maximum 4 MiB. Do not import images without reuse permission.',
     inputSchema: z.object({ ...imageDetails, image_url: z.url().max(2000) }).strict(),
     handler: safeHandler(images.importUrl),
   });

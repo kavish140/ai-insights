@@ -45,6 +45,7 @@ before(async () => {
 
   await db.exec(await readFile(new URL('20261007115755_reader_discovery.sql', migrations), 'utf8'));
   await db.exec(await readFile(new URL('20261007154319_personalized_reading_quality_tags.sql', migrations), 'utf8'));
+  await db.exec(await readFile(new URL('20261113155443_optional_image_metadata.sql', migrations), 'utf8'));
   await db.exec('set role service_role');
 });
 after(async () => { await db.close(); });
@@ -229,6 +230,14 @@ test('stateless initialization and all eleven tools are available without auth',
   const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test-client', version: '1' } });
   assert.equal(init.result.serverInfo.name, 'ai-insights-blog');
   const tools = await rpc('tools/list');
+  for (const name of ['upload_image', 'import_image_url']) {
+    const tool = tools.result.tools.find((tool: { name: string }) => tool.name === name);
+    assert.ok(tool.inputSchema.required.includes('alt'));
+    for (const field of ['source_url', 'credit', 'license_note']) {
+      assert.ok(!tool.inputSchema.required.includes(field), `${name}.${field} must be optional in discovery`);
+      assert.match(tool.inputSchema.properties[field].description, /optional/i);
+    }
+  }
   assert.deepEqual(tools.result.tools.map((tool: { name: string }) => tool.name).sort(), ['get_site_context', 'list_posts', 'get_post', 'create_draft', 'update_draft', 'validate_draft', 'publish_post', 'unpublish_post', 'upload_image', 'import_image_url', 'list_images'].sort());
   assert.equal((await call('get_site_context', {})).url, 'https://ai-insights.sitenova.dev');
 });
@@ -312,20 +321,28 @@ test('rejects hostile browser origins and oversized/malformed requests', async (
   assert.ok(!((await malformed.text()).includes('test-server-credential')));
 });
 
-test('v2 uploads reuse content, require permission metadata and validate cover/inline images', async () => {
+test('v2 uploads accept optional metadata, reuse content and validate cover/inline images', async () => {
   const input = {
     base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDYQAAAAASUVORK5CYII=',
     alt: 'A test pixel', source_url: 'https://example.com/original', credit: 'Test fixture', license_note: 'Original test fixture, permitted for this test.',
   };
-  const uploaded = await call('upload_image', input);
+  const uploaded = await call('upload_image', { base64: input.base64, alt: input.alt });
   assert.ok(!uploaded.error, JSON.stringify(uploaded));
+  assert.equal(uploaded.image.source_url, '');
+  assert.equal(uploaded.image.credit, '');
+  assert.equal(uploaded.image.license_note, '');
   assert.match(uploaded.image.url, /blog-images\/articles\/[a-f0-9]{64}\.png$/);
   const retried = await call('upload_image', input);
   assert.equal(retried.image.url, uploaded.image.url);
   assert.equal(retried.reused, true);
   assert.equal(storedImages.size, 1);
   assert.equal((await call('list_images', {})).images.length, 1);
-  assert.ok((await call('upload_image', { ...input, license_note: '' })).error);
+  assert.ok(!(await call('upload_image', { ...input, source_url: '', credit: '', license_note: '' })).error);
+  assert.ok((await call('upload_image', { ...input, source_url: 'invalid-url' })).error);
+  assert.ok((await call('upload_image', { ...input, source_url: 'http://example.com/source' })).error);
+  assert.ok((await call('upload_image', { ...input, alt: '' })).error);
+  assert.ok((await call('upload_image', { ...input, credit: 'x'.repeat(301) })).error);
+  assert.ok((await call('upload_image', { ...input, license_note: 'x'.repeat(501) })).error);
   assert.ok((await call('upload_image', { ...input, base64: btoa('<svg>invalid</svg>') })).error);
   assert.ok((await call('upload_image', { ...input, base64: 'not base64!' })).error);
   assert.match((await call('import_image_url', { ...input, base64: undefined, image_url: 'http://127.0.0.1/private' })).error, /HTTPS|Validation/);

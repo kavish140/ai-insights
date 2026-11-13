@@ -1031,15 +1031,15 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                     {(
                       [
                         ["alt", "Alt text", 300],
-                        ["source_url", "Source URL", 2000],
-                        ["credit", "Credit", 300],
-                        ["license_note", "Permission / license note", 500],
+                        ["source_url", "Source URL (optional)", 2000],
+                        ["credit", "Credit (optional)", 300],
+                        ["license_note", "Permission / license note (optional)", 500],
                       ] as const
                     ).map(([key, label, max]) => (
                       <Field key={key} label={label}>
                         <input
                           className={input}
-                          required
+                          required={key === "alt"}
                           type={key === "source_url" ? "url" : "text"}
                           maxLength={max}
                           value={imageDetails[key]}
@@ -1196,14 +1196,14 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                     {(
                       [
                         ["alt", "Alt text", 300],
-                        ["source_url", "Source URL", 2000],
-                        ["credit", "Credit", 300],
-                        ["license_note", "Permission / license note", 500],
+                        ["source_url", "Source URL (optional)", 2000],
+                        ["credit", "Credit (optional)", 300],
+                        ["license_note", "Permission / license note (optional)", 500],
                       ] as const
                     ).map(([key, label, max]) => (
                       <Field key={key} label={label}>
                         <input
-                          required
+                          required={key === "alt"}
                           className={input}
                           maxLength={max}
                           type={key === "source_url" ? "url" : "text"}

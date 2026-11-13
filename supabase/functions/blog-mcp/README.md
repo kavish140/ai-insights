@@ -25,7 +25,10 @@ policies still apply to website clients.
    version. Visit `/health`; version should be `3.0.0` and `controls_available: true`.
 8. Keep the existing Claude connector and endpoint below. Refresh/reconnect if it
    still shows only eight tools; v2 exposes eleven tools. Authentication stays None.
-9. Deploy the matching website build for cover images, inline images, captions,
+9. Apply `supabase/migrations/20261113155443_optional_image_metadata.sql` to allow
+   blank source URL, credit, and permission/license notes. Deploy the matching
+   Edge Function and website changes together.
+10. Deploy the matching website build for cover images, inline images, captions,
    and cover-based Open Graph/Twitter/BlogPosting metadata. The new website loader
    also supports the v1 database while the migration is pending.
 
@@ -58,12 +61,12 @@ emergency website admin corrections remain available.
 - `validate_draft`: publication readiness, HTML, fields, date, and slug checks.
 - `publish_post`: publish a specific draft revision with `confirmed: true`.
 - `unpublish_post`: return a published revision to drafts with `confirmed: true`.
-- `upload_image`: base64 PNG/JPEG/WebP bytes, up to 4 MiB, plus alt text, source,
-  credit and permission note. Raw standard base64, not a data URL. Use actual file
+- `upload_image`: base64 PNG/JPEG/WebP bytes, up to 4 MiB, plus required alt text and optional source URL,
+  credit and permission/license note. Raw standard base64, not a data URL. Use actual file
   bytes; never invent or truncate base64.
 - `import_image_url`: imports from HTTPS `images.unsplash.com`,
-  `upload.wikimedia.org` or `images.pexels.com`; requires a direct image URL and
-  source/credit/permission metadata. Redirects are rejected. Other sources can
+  `upload.wikimedia.org` or `images.pexels.com`; requires a direct image URL and alt text;
+  source/credit/permission metadata is optional. Redirects are rejected. Other sources can
   be downloaded by a capable client and passed to `upload_image`.
 - `list_images`: paginated registered uploads including credits and permission notes.
 
