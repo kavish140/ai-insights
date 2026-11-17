@@ -1,16 +1,19 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
-  LayoutDashboard,
-  FileText,
-  Tags,
-  Images,
-  Settings2,
   ExternalLink,
   RefreshCw,
-  Activity,
-  SearchCheck,
-  Mail,
+  Plus,
+  LogOut,
+  X,
+  Info,
+  FileText,
+  CheckCircle2,
+  CalendarClock,
+  FileClock,
+  ArrowUpRight,
+  ShieldCheck,
+  Save,
 } from "lucide-react";
 import { browserClient } from "@/lib/supabase-client";
 import {
@@ -25,7 +28,6 @@ import {
   type Article,
   type Media,
   type Settings,
-  duplicateArticle,
 } from "@/lib/admin";
 import { formatDate } from "@/lib/posts";
 import { ActivityPanel } from "./admin/ActivityPanel";
@@ -41,29 +43,20 @@ import { ContentPanel } from "./admin/ContentPanel";
 import { SystemPanel } from "./admin/SystemPanel";
 import { SettingsPanel } from "./admin/SettingsPanel";
 import { SubscribersPanel } from "./admin/SubscribersPanel";
+import { FeaturedPostPicker } from "./admin/FeaturedPostPicker";
+import { AdminFrame, type AdminTab } from "./admin/AdminFrame";
+
+import { AdminPostTable } from "./admin/AdminPostTable";
 import { normalizeSettings } from "@/lib/site-settings";
 import type { Operation, PublishingActivity } from "@/lib/admin-operations";
 
-const input = "mt-2 w-full rounded-lg border border-input bg-surface px-3 py-2.5 text-sm";
+const input =
+  "admin-input mt-2 w-full rounded-lg border border-input bg-surface px-3 py-2.5 text-sm";
 const button =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50";
+  "admin-button inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50";
 const primary = `${button} border-transparent bg-brand-gradient text-primary-foreground`;
-const panel = "rounded-2xl border border-border bg-card p-5 sm:p-6";
-const tabs = [
-  { name: "Overview", icon: LayoutDashboard },
-  { name: "Posts", icon: FileText },
-  { name: "MCP Activity", icon: Activity },
-  { name: "Content", icon: FileText },
-  { name: "SEO", icon: SearchCheck },
-  { name: "Readers", icon: Activity },
-  { name: "Categories", icon: Tags },
-  { name: "Tags", icon: Tags },
-  { name: "Media", icon: Images },
-  { name: "System", icon: Settings2 },
-  { name: "Subscribers", icon: Mail },
-  { name: "Settings", icon: Settings2 },
-] as const;
-type Tab = (typeof tabs)[number]["name"] | "Editor";
+const panel = "admin-panel rounded-2xl border border-border bg-card p-5 sm:p-6";
+type Tab = AdminTab;
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block text-sm font-medium">
@@ -187,6 +180,8 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
     setMessage("");
   }
   function edit(article: Article) {
+    if (tab === "Settings" && settingsDirty && !window.confirm("Discard unsaved site settings?"))
+      return;
     if (tab === "Editor" && dirty && !window.confirm("Discard unsaved article corrections?"))
       return;
     setDraft({ ...article });
@@ -241,134 +236,61 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
 
   function postTable(posts: Article[]) {
     return (
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-border text-xs uppercase text-muted-foreground">
-            <tr>
-              {["Article", "Category", "Publish date", "Status", "Actions"].map((label) => (
-                <th key={label} className="px-3 py-3">
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {posts.map((article) => (
-              <tr key={article.id} className="border-b border-border/60">
-                <td className="max-w-[300px] px-3 py-4">
-                  <button
-                    disabled={busy}
-                    className="text-left font-medium hover:text-primary"
-                    onClick={() => edit(article)}
-                  >
-                    {article.title}
-                  </button>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    /blog/{article.slug}
-                  </p>
-                </td>
-                <td className="px-3 py-4">{article.category}</td>
-                <td className="whitespace-nowrap px-3 py-4">{formatDate(article.date)}</td>
-                <td className="px-3 py-4">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs ${article.status === "published" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"}`}
-                  >
-                    {article.status === "published" &&
-                    article.date > new Date().toISOString().slice(0, 10)
-                      ? "Scheduled"
-                      : article.status}
-                  </span>
-                </td>
-                <td className="px-3 py-4">
-                  <div className="flex flex-wrap gap-2">
-                    <button disabled={busy} className={button} onClick={() => edit(article)}>
-                      Edit
-                    </button>
-                    <button disabled={busy} className={button} onClick={() => setReview(article)}>
-                      Preview / history
-                    </button>
-                    <button
-                      disabled={busy}
-                      className={button}
-                      onClick={() =>
-                        void run(async () => {
-                          const copy = await duplicateArticle(article);
-                          edit(copy);
-                        }, "Article duplicated as a draft.")
-                      }
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      disabled={busy}
-                      className={button}
-                      onClick={() => {
-                        const next = article.status === "published" ? "draft" : "published";
-                        void run(
-                          () => changeArticle(article, next),
-                          next === "published" ? "Article published." : "Article unpublished.",
-                        );
-                      }}
-                    >
-                      {article.status === "published"
-                        ? "Unpublish"
-                        : article.date > new Date().toISOString().slice(0, 10)
-                          ? "Schedule"
-                          : "Publish"}
-                    </button>
-                    {article.status === "published" &&
-                      article.date <= new Date().toISOString().slice(0, 10) && (
-                        <a
-                          className={button}
-                          href={`/blog/${article.slug}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View live <ExternalLink size={13} />
-                        </a>
-                      )}
-                    <button
-                      disabled={busy}
-                      className={`${button} text-destructive`}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Permanently delete “${article.title}”? This cannot be undone.`,
-                          )
-                        )
-                          void run(() => changeArticle(article, "delete"), "Article deleted.");
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!posts.length && (
-          <p className="py-10 text-center text-sm text-muted-foreground">No articles found.</p>
-        )}
-      </div>
+      <AdminPostTable
+        posts={posts}
+        articles={articles}
+        busy={busy}
+        edit={edit}
+        review={setReview}
+        run={run}
+        onClearFilters={
+          search || status !== "all" || category !== "all"
+            ? () => {
+                setSearch("");
+                setStatus("all");
+                setCategory("all");
+                setPage(1);
+              }
+            : undefined
+        }
+      />
     );
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-            AI Insights / Admin
-          </p>
-          <h1 className="mt-2 text-3xl font-bold">Publishing control</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            ChatGPT and MCP publish. Manage and correct the results here.
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <AdminFrame
+      active={tab}
+      busy={busy}
+      loading={loading || !authorized}
+      onNavigate={navigate}
+      counts={{
+        posts: articles.length,
+        drafts: articles.filter((article) => article.status === "draft").length,
+        media: media.length,
+      }}
+      actions={
+        <>
+          <button
+            className={`${primary} admin-new-draft`}
+            disabled={busy || loading || !authorized}
+            aria-label={tab === "Editor" ? "Save article" : "Create new draft"}
+            onClick={() =>
+              tab === "Editor"
+                ? (
+                    document.getElementById("admin-article-editor") as HTMLFormElement | null
+                  )?.requestSubmit()
+                : edit(
+                    emptyArticle(settings.default_author, settings.default_category ?? topics[0]),
+                  )
+            }
+          >
+            {tab === "Editor" ? <Save size={16} /> : <Plus size={16} />}
+            <span>{tab === "Editor" ? "Save article" : "New draft"}</span>
+          </button>
           <button
             className={button}
+            aria-label="Refresh workspace"
+            title="Refresh workspace"
             disabled={busy || loading}
             onClick={() => {
               if (
@@ -380,11 +302,13 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
               void run(async () => {}, "Up to date.");
             }}
           >
-            <RefreshCw size={15} />
-            Refresh
+            <RefreshCw size={15} className={busy ? "admin-spinning" : ""} />
+            <span>Refresh</span>
           </button>
           <button
             className={button}
+            aria-label="Sign out"
+            title="Sign out"
             disabled={busy}
             onClick={() => {
               if (
@@ -402,58 +326,104 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
               void signOut().catch((error) => setMessage(messageFor(error)));
             }}
           >
-            Sign out
+            <LogOut size={15} /> <span>Sign out</span>
           </button>
-        </div>
-      </header>
-      {message && (
-        <p role="status" className="mt-5 rounded-lg border border-border bg-secondary p-4 text-sm">
-          {message}
-        </p>
-      )}
+        </>
+      }
+      notice={
+        message ? (
+          <div role="status" className="admin-notice">
+            <Info size={18} />
+            <p>{message}</p>
+            <button aria-label="Dismiss notification" onClick={() => setMessage("")}>
+              <X size={16} />
+            </button>
+          </div>
+        ) : undefined
+      }
+    >
       {loading ? (
-        <p className="py-16">Loading admin…</p>
+        <div className="admin-loading" role="status" aria-label="Loading publishing workspace">
+          <p>Preparing your workspace…</p>
+          <div className="admin-loading-stats">
+            {[0, 1, 2, 3].map((index) => (
+              <div key={index} />
+            ))}
+          </div>
+          <div className="admin-loading-panel" />
+        </div>
       ) : !authorized ? (
-        <p className="py-16 text-muted-foreground">
-          Admin data is unavailable. Check your account access and refresh.
-        </p>
+        <div className="admin-empty">
+          <ShieldCheck size={32} />
+          <h2>Workspace access is unavailable</h2>
+          <p>Check your editor account access and use Refresh to try again.</p>
+        </div>
       ) : (
         <>
-          <nav aria-label="Admin sections" className="my-8 flex flex-wrap gap-2">
-            {tabs.map(({ name, icon: Icon }) => (
-              <button
-                key={name}
-                disabled={busy}
-                aria-current={tab === name ? "page" : undefined}
-                onClick={() => navigate(name)}
-                className={`${button} ${tab === name ? "bg-primary text-primary-foreground hover:bg-primary" : "bg-card text-muted-foreground"}`}
-              >
-                <Icon size={16} />
-                {name}
-              </button>
-            ))}
-          </nav>
           <fieldset disabled={busy} className="min-w-0">
             {tab === "Overview" && (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <div className="admin-metrics">
                   {[
-                    ["Total posts", articles.length],
-                    [
-                      "Published",
-                      articles.filter(
+                    {
+                      label: "Total articles",
+                      value: articles.length,
+                      detail: "Across your publication",
+                      Icon: FileText,
+                      filter: "all",
+                    },
+                    {
+                      label: "Published",
+                      value: articles.filter(
                         (article) => article.status === "published" && article.date <= today,
                       ).length,
-                    ],
-                    ["Drafts", articles.filter((article) => article.status === "draft").length],
-                    ["Categories", topics.length],
-                  ].map(([label, count]) => (
-                    <div key={label} className={panel}>
-                      <p className="text-sm text-muted-foreground">{label}</p>
-                      <p className="mt-3 text-3xl font-semibold">{count}</p>
-                    </div>
+                      detail: "Live and ready to read",
+                      Icon: CheckCircle2,
+                      filter: "published",
+                    },
+                    {
+                      label: "Drafts",
+                      value: articles.filter((article) => article.status === "draft").length,
+                      detail: "Stories still taking shape",
+                      Icon: FileClock,
+                      filter: "draft",
+                    },
+                    {
+                      label: "Scheduled",
+                      value: articles.filter(
+                        (article) => article.status === "published" && article.date > today,
+                      ).length,
+                      detail: "Queued for a future date",
+                      Icon: CalendarClock,
+                      filter: "scheduled",
+                    },
+                  ].map(({ label, value, detail, Icon, filter }) => (
+                    <button
+                      key={label}
+                      disabled={busy}
+                      className="admin-metric"
+                      data-tone={filter}
+                      onClick={() => {
+                        setStatus(filter);
+                        setSearch("");
+                        setCategory("all");
+                        setPage(1);
+                        navigate("Posts");
+                      }}
+                    >
+                      <div>
+                        <span>{label}</span>
+                        <Icon size={18} />
+                      </div>
+                      <strong>{value}</strong>
+                      <p>
+                        {detail}
+                        <ArrowUpRight size={14} />
+                      </p>
+                    </button>
                   ))}
                 </div>
+                <FeaturedPostPicker articles={articles} busy={busy} run={run} />
                 <section className={panel}>
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-lg font-semibold">Latest posts</h2>
@@ -514,110 +484,121 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
             {tab === "Readers" && <ReadersPanel />}
             {tab === "SEO" && <SeoPanel articles={articles} edit={edit} />}
             {tab === "Posts" && (
-              <section className={panel}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-xl font-semibold">
-                    Posts <span className="text-sm text-muted-foreground">({filtered.length})</span>
-                  </h2>
-                  <button
-                    className={button}
-                    onClick={() =>
-                      edit(
-                        emptyArticle(
-                          settings.default_author,
-                          settings.default_category ?? topics[0],
-                        ),
-                      )
-                    }
-                  >
-                    New emergency draft
-                  </button>
-                </div>
-                <div className="my-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Field label="Search">
-                    <input
-                      type="search"
-                      className={input}
-                      placeholder="Title, slug or author"
-                      value={search}
-                      onChange={(event) => {
-                        setSearch(event.target.value);
-                        setPage(1);
-                      }}
-                    />
-                  </Field>
-                  <Field label="Status">
-                    <select
-                      className={input}
-                      value={status}
-                      onChange={(event) => {
-                        setStatus(event.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      <option value="all">All statuses</option>
-                      <option value="published">Published</option>
-                      <option value="draft">Drafts</option>
-                      <option value="scheduled">Scheduled</option>
-                    </select>
-                  </Field>
-                  <Field label="Category">
-                    <select
-                      className={input}
-                      value={category}
-                      onChange={(event) => {
-                        setCategory(event.target.value);
-                        setPage(1);
-                      }}
-                    >
-                      <option value="all">All categories</option>
-                      {topics.map((topic) => (
-                        <option key={topic}>{topic}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Sort">
-                    <select
-                      className={input}
-                      value={sort}
-                      onChange={(event) => setSort(event.target.value)}
-                    >
-                      <option value="newest">Newest first</option>
-                      <option value="oldest">Oldest first</option>
-                      <option value="title">Title A–Z</option>
-                    </select>
-                  </Field>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  A published article with a future date is scheduled and becomes public on that
-                  date (UTC).
-                </p>
-                {postTable(visible)}
-                <div className="mt-5 flex items-center justify-between text-sm">
-                  <span>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <div className="flex gap-2">
+              <div className="space-y-6">
+                <FeaturedPostPicker articles={articles} busy={busy} run={run} collapsible />
+                <section className={panel}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-xl font-semibold">
+                      Posts{" "}
+                      <span className="text-sm text-muted-foreground">({filtered.length})</span>
+                    </h2>
                     <button
                       className={button}
-                      disabled={busy || currentPage === 1}
-                      onClick={() => setPage(currentPage - 1)}
+                      onClick={() =>
+                        edit(
+                          emptyArticle(
+                            settings.default_author,
+                            settings.default_category ?? topics[0],
+                          ),
+                        )
+                      }
                     >
-                      Previous
-                    </button>
-                    <button
-                      className={button}
-                      disabled={busy || currentPage === totalPages}
-                      onClick={() => setPage(currentPage + 1)}
-                    >
-                      Next
+                      New emergency draft
                     </button>
                   </div>
-                </div>
-              </section>
+                  <div className="admin-post-filters">
+                    <Field label="Search">
+                      <input
+                        type="search"
+                        className={input}
+                        placeholder="Title, slug or author"
+                        value={search}
+                        onChange={(event) => {
+                          setSearch(event.target.value);
+                          setPage(1);
+                        }}
+                      />
+                    </Field>
+                    <details
+                      className="admin-filter-details"
+                      open={status !== "all" || category !== "all" || sort !== "newest"}
+                    >
+                      <summary>Filters &amp; sorting</summary>
+                      <div className="admin-filter-fields">
+                        <Field label="Status">
+                          <select
+                            className={input}
+                            value={status}
+                            onChange={(event) => {
+                              setStatus(event.target.value);
+                              setPage(1);
+                            }}
+                          >
+                            <option value="all">All statuses</option>
+                            <option value="published">Published</option>
+                            <option value="draft">Drafts</option>
+                            <option value="scheduled">Scheduled</option>
+                          </select>
+                        </Field>
+                        <Field label="Category">
+                          <select
+                            className={input}
+                            value={category}
+                            onChange={(event) => {
+                              setCategory(event.target.value);
+                              setPage(1);
+                            }}
+                          >
+                            <option value="all">All categories</option>
+                            {topics.map((topic) => (
+                              <option key={topic}>{topic}</option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Sort">
+                          <select
+                            className={input}
+                            value={sort}
+                            onChange={(event) => setSort(event.target.value)}
+                          >
+                            <option value="newest">Newest first</option>
+                            <option value="oldest">Oldest first</option>
+                            <option value="title">Title A–Z</option>
+                          </select>
+                        </Field>
+                      </div>
+                    </details>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Future-dated published articles are scheduled (UTC).
+                  </p>
+                  {postTable(visible)}
+                  <div className="mt-5 flex items-center justify-between text-sm">
+                    <span>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        className={button}
+                        disabled={busy || currentPage === 1}
+                        onClick={() => setPage(currentPage - 1)}
+                      >
+                        Previous
+                      </button>
+                      <button
+                        className={button}
+                        disabled={busy || currentPage === totalPages}
+                        onClick={() => setPage(currentPage + 1)}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </div>
             )}
             {tab === "Editor" && (
-              <form onSubmit={save} className={`${panel} space-y-5`}>
+              <form id="admin-article-editor" onSubmit={save} className={`${panel} space-y-5`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold">
@@ -850,14 +831,10 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
                     Paragraphs, headings, lists and links. Unsafe HTML is removed on public pages.
                   </span>
                 </Field>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.featured}
-                    onChange={(event) => setDraft({ ...draft, featured: event.target.checked })}
-                  />
-                  Featured article
-                </label>
+                <p className="text-sm text-muted-foreground">
+                  Choose the homepage featured article using the selector in Overview or Posts. It
+                  automatically replaces the previous pick.
+                </p>
                 <div className="flex items-center gap-3">
                   <button type="button" className={button} onClick={() => setReview(draft)}>
                     Preview / history
@@ -1280,6 +1257,6 @@ export function AdminWorkspace({ signOut }: { signOut: () => Promise<void> }) {
           )}
         </>
       )}
-    </div>
+    </AdminFrame>
   );
 }

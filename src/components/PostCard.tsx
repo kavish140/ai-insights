@@ -3,6 +3,7 @@ import { formatDate, type Post } from "@/lib/posts";
 import { ArticleImage } from "./ArticleImage";
 import { useEffect, useRef } from "react";
 import { trackRecommendation, type Recommendation } from "@/lib/reader-tracking";
+import { SaveArticle } from "./SaveArticle";
 
 export function PostCard({
   post,
@@ -35,7 +36,8 @@ export function PostCard({
     return () => observer.disconnect();
   }, [post.slug, source, placement]);
   return (
-    <article ref={card} className="h-full">
+    <article ref={card} className="post-card relative h-full">
+      <SaveArticle post={post} />
       <Link
         to="/blog/$slug"
         params={{ slug: post.slug }}
@@ -47,7 +49,7 @@ export function PostCard({
           if (event.button === 1 && recommendation)
             void trackRecommendation(post.slug, recommendation, true);
         }}
-        className={`group flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+        className={`post-card-link group flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
           size === "large" ? "md:flex-row md:items-center md:gap-8 md:p-8" : ""
         }`}
       >

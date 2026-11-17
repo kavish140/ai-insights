@@ -10,11 +10,11 @@ export function SiteFooter({
   categories?: string[];
 }) {
   return (
-    <footer className="mt-20 border-t border-border bg-surface">
+    <footer className="site-footer mt-20 border-t border-border bg-surface">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-4">
         <div className="md:col-span-2">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-gradient text-sm font-bold text-primary-foreground">
+            <span className="brand-mark grid h-10 w-10 place-items-center rounded-xl bg-brand-gradient text-sm font-bold text-primary-foreground">
               {site.brand_initials ?? "AI"}
             </span>
             <span className="font-display text-base font-semibold">{site.name}</span>

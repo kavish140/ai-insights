@@ -2,11 +2,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { browserClient } from "@/lib/supabase-client";
 import { AdminWorkspace } from "@/components/AdminWorkspace";
+import { AdminThemeToggle } from "@/components/admin/AdminFrame";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  FileText,
+  BarChart3,
+  Sparkles,
+  LockKeyhole,
+} from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
+import adminCss from "../admin.css?url";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [{ title: "Admin — AI Insights" }, { name: "robots", content: "noindex, nofollow" }],
+    links: [{ rel: "stylesheet", href: adminCss }],
   }),
   component: AdminPage,
 });
@@ -18,6 +32,7 @@ function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -61,6 +76,7 @@ function AdminPage() {
       const { error } = await (await browserClient()).auth.signInWithPassword({ email, password });
       if (error) throw error;
       setPassword("");
+      setShowPassword(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Sign-in failed.");
     } finally {
@@ -68,49 +84,114 @@ function AdminPage() {
     }
   }
 
-  if (loading) return <p className="mx-auto max-w-md px-4 py-16">Loading admin…</p>;
+  if (loading)
+    return (
+      <div className="admin-auth-loading" role="status">
+        <span className="admin-brand-mark">AI</span>
+        <p>Opening your workspace…</p>
+      </div>
+    );
   if (!session)
     return (
-      <div className="mx-auto max-w-md px-4 py-16">
-        <h1 className="text-2xl font-bold">Admin sign-in</h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          Sign in with your designated Supabase editor account.
-        </p>
-        <form onSubmit={signIn} className="mt-6 space-y-4">
-          <label className="block">
-            Email
-            <input
-              className={inputClass}
-              type="email"
-              required
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label className="block">
-            Password
-            <input
-              className={inputClass}
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </label>
-          <button
-            disabled={busy}
-            className="rounded-lg bg-brand-gradient px-5 py-2.5 text-primary-foreground"
-          >
-            {busy ? "Signing in…" : "Sign in"}
-          </button>
-          {message && (
-            <p role="status" className="text-sm">
-              {message}
+      <div className="admin-auth">
+        <header className="admin-auth-header">
+          <a href="/" className="admin-brand">
+            <span>AI</span>
+            <div>
+              <strong>AI Insights</strong>
+              <small>EDITORIAL WORKSPACE</small>
+            </div>
+          </a>
+          <AdminThemeToggle />
+        </header>
+        <div className="admin-auth-layout">
+          <section className="admin-auth-intro">
+            <p className="admin-eyebrow">A SPACE FOR GOOD IDEAS</p>
+            <h2>
+              Your next great story <br />
+              starts here.
+            </h2>
+            <p>
+              A considered workspace for your content, your audience, and everything you’re
+              building.
             </p>
-          )}
-        </form>
+            <div className="admin-auth-capabilities">
+              <span>
+                <FileText size={17} /> Shape your publication
+              </span>
+              <span>
+                <BarChart3 size={17} /> Understand your readers
+              </span>
+              <span>
+                <Sparkles size={17} /> Keep your best work in focus
+              </span>
+            </div>
+            <a href="/">
+              Back to the publication <ArrowUpRight size={16} />
+            </a>
+          </section>
+          <section className="admin-auth-card">
+            <span className="admin-auth-lock">
+              <LockKeyhole size={23} />
+            </span>
+            <p className="admin-eyebrow">ADMIN SIGN-IN</p>
+            <h1>Welcome back.</h1>
+            <p className="admin-auth-description">
+              Sign in with your designated editor account to open your workspace.
+            </p>
+            <form onSubmit={signIn} className="admin-auth-form">
+              <label className="block">
+                Email
+                <input
+                  className={inputClass}
+                  type="email"
+                  required
+                  autoComplete="username"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+              <label className="block">
+                Password
+                <div className="admin-password-field">
+                  <input
+                    aria-label="Password"
+                    className={inputClass}
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </label>
+              <button
+                disabled={busy}
+                className="admin-auth-submit bg-brand-gradient text-primary-foreground"
+              >
+                {busy ? "Signing in…" : "Open workspace"}
+                <ArrowRight size={16} />
+              </button>
+              {message && (
+                <p role="alert" className="admin-auth-error">
+                  {message}
+                </p>
+              )}
+            </form>
+            <p className="admin-auth-footnote">
+              <ShieldCheck size={14} /> Restricted to designated editors.
+            </p>
+          </section>
+        </div>
+        <p className="admin-auth-copyright">AI Insights · A SiteNova publication</p>
       </div>
     );
 

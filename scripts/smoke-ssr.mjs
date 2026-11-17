@@ -436,7 +436,10 @@ try {
   assert.ok(qualityArticle.includes("data-article-body"));
   assert.ok(homepage.indexOf("Featured") < homepage.indexOf("Advertisement"));
   assert.ok(homepage.includes("start-here"));
-  assert.equal([...homepage.matchAll(/aria-label="Read /g)].length, 7);
+  // Four compact previews are shown initially, with remaining stories expanded on demand.
+  assert.equal([...homepage.matchAll(/aria-label="Read /g)].length, 5);
+  assert.ok(homepage.includes("Show 2 more stories"));
+  assert.ok(homepage.includes('aria-label="Reading settings"'));
   customSettings = true;
   const configuredHome = await (await fetch("http://127.0.0.1:8787/")).text();
   assert.equal(metaContent(configuredHome, "property", "og:title"), "Custom SEO title");

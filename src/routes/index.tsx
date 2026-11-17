@@ -7,6 +7,10 @@ import { getHomeArticles } from "@/lib/post-functions";
 import { ReadingPath } from "@/components/ReadingPath";
 import { Newsletter } from "@/components/Newsletter";
 import { PersonalizedReading } from "@/components/PersonalizedReading";
+import { ArrowUpRight, ArrowRight, Search, Clock3, Compass, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { ReadingShelf } from "@/components/ReadingShelf";
+import { SaveArticle } from "@/components/SaveArticle";
 
 export const Route = createFileRoute("/")({
   loader: () => getHomeArticles(),
@@ -41,105 +45,220 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const { site, categories } = useLoaderData({ from: "__root__" });
   const { featured, latest: rest, path } = Route.useLoaderData();
-
+  const navigate = Route.useNavigate();
+  const [topic, setTopic] = useState("");
+  const [shortOnly, setShortOnly] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const stories = rest.filter(
+    (post) => (!topic || post.category === topic) && (!shortOnly || post.readingMinutes <= 5),
+  );
+  const displayed = expanded ? stories : stories.slice(0, 4);
   return (
-    <>
-      <section className="bg-hero border-b border-border">
-        <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1fr_300px] md:py-12">
-          <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface/80 px-3 py-1 text-xs font-medium text-muted-foreground">
-              {site.tagline}
-            </span>
-            <h1 className="mt-6 max-w-3xl text-4xl font-bold leading-[1.1] md:text-6xl">
-              {site.home_title}
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-              {site.description}
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                to="/blog"
-                className="rounded-lg bg-brand-gradient px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-card"
-              >
-                Read the latest
-              </Link>
-              {site.show_reading_path && (
-                <Link
-                  to="/"
-                  hash="start-here"
-                  className="rounded-lg border border-border bg-surface px-5 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
-                >
-                  Start with the basics
-                </Link>
-              )}
-            </div>
-          </div>
-          <div className="hidden rounded-2xl border border-primary/15 bg-surface/70 p-6 md:block">
-            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              From idea to useful work
-            </p>
-            <ol className="mt-5 space-y-3 text-sm font-medium">
-              <li className="rounded-lg bg-surface p-3">01 · Choose a repeatable task</li>
-              <li className="rounded-lg bg-primary-soft p-3">02 · Automate, then review</li>
-              <li className="rounded-lg bg-surface p-3">03 · Measure what improved</li>
-            </ol>
-          </div>
+    <div className="home-editorial mx-auto max-w-6xl px-4 sm:px-6">
+      <section className="editorial-intro" aria-labelledby="home-title">
+        <div>
+          <p className="section-eyebrow">LESS HYPE. MORE UNDERSTANDING.</p>
+          <h1 id="home-title">{site.home_title}</h1>
+          <p className="intro-description">{site.description}</p>
         </div>
+        <form
+          className="home-search"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const q = String(new FormData(event.currentTarget).get("q") ?? "").trim();
+            void navigate({ to: "/blog", search: { q: q || undefined } });
+          }}
+        >
+          <Search size={18} />
+          <input
+            name="q"
+            aria-label="Search all articles"
+            placeholder="What are you curious about?"
+            maxLength={100}
+          />
+          <button type="submit" aria-label="Search">
+            <ArrowRight size={18} />
+          </button>
+        </form>
       </section>
-
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        <PersonalizedReading />
-        <section className="py-10">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Featured
-          </h2>
-          <div className="mt-5">
-            {featured ? (
-              <PostCard post={featured} size="large" />
-            ) : (
-              <p className="text-muted-foreground">Our first articles are coming soon.</p>
-            )}
-          </div>
+      <nav className="editorial-topics" aria-label="Explore topics">
+        <Link to="/blog" className="topic-all">
+          <Compass size={14} /> Explore all
+        </Link>
+        {categories.map((category) => (
+          <Link key={category} to="/blog" search={{ category }}>
+            {category}
+            <ArrowUpRight size={12} />
+          </Link>
+        ))}
+      </nav>
+      {featured ? (
+        <section className="front-page" aria-label="Featured and recent stories">
+          <article className="lead-story">
+            <SaveArticle post={featured} />
+            <Link
+              to="/blog/$slug"
+              params={{ slug: featured.slug }}
+              aria-label={`Read ${featured.title}`}
+              className="lead-story-link"
+            >
+              <div className="lead-art" aria-hidden="true">
+                <span className="art-caption">IDEAS INTO POSSIBILITY</span>
+              </div>
+              <div className="lead-copy">
+                <div className="story-kicker">
+                  <span>
+                    <Sparkles size={12} /> EDITOR’S PICK
+                  </span>
+                  <span>{featured.category}</span>
+                </div>
+                <h2>{featured.title}</h2>
+                <p>{featured.description}</p>
+                <div className="story-bottom">
+                  <span>
+                    <Clock3 size={13} />
+                    {featured.readingMinutes} min read
+                  </span>
+                  <strong>
+                    Explore the story <ArrowUpRight size={16} />
+                  </strong>
+                </div>
+              </div>
+            </Link>
+          </article>
+          <aside className="front-queue" aria-label="More to explore">
+            <div className="queue-heading">
+              <span>ON YOUR RADAR</span>
+              <span>01 — 03</span>
+            </div>
+            {rest.slice(0, 3).map((post, index) => (
+              <Link
+                key={post.slug}
+                to="/blog/$slug"
+                params={{ slug: post.slug }}
+                className="queue-story"
+              >
+                <span className="queue-number">0{index + 1}</span>
+                <div>
+                  <small>
+                    {post.category} · {post.readingMinutes} min
+                  </small>
+                  <h3>{post.title}</h3>
+                </div>
+                <ArrowUpRight size={16} />
+              </Link>
+            ))}
+            <Link to="/blog" search={{ sort: "popular" }} className="queue-more">
+              Browse most-read articles <ArrowRight size={15} />
+            </Link>
+          </aside>
         </section>
-        {site.show_reading_path && <ReadingPath posts={path} />}
-        <div className="mb-10">
-          <AdSlot format="leaderboard" />
-        </div>
-
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <section>
-            <h2 className="text-2xl font-semibold">Latest articles</h2>
-            <div className="mt-6 grid gap-6 sm:grid-cols-2">
-              {rest.map((post) => (
-                <PostCard key={post.slug} post={post} />
+      ) : (
+        <section className="empty-front">
+          <p>Our first articles are coming soon.</p>
+          <Link to="/blog">Explore the library →</Link>
+        </section>
+      )}
+      <ReadingShelf />
+      <div className="discovery-layout">
+        <section className="latest-stories" aria-labelledby="latest-title">
+          <div className="discovery-heading">
+            <div>
+              <p className="section-eyebrow">FIND YOUR NEXT GOOD READ</p>
+              <h2 id="latest-title">The latest thinking</h2>
+            </div>
+            <Link to="/blog">
+              All articles <ArrowUpRight size={15} />
+            </Link>
+          </div>
+          <div className="discovery-controls">
+            <div className="feed-topics" role="group" aria-label="Filter latest stories by topic">
+              <button
+                aria-pressed={!topic}
+                onClick={() => {
+                  setTopic("");
+                  setExpanded(false);
+                }}
+              >
+                All topics
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  aria-pressed={topic === category}
+                  onClick={() => {
+                    setTopic(category);
+                    setExpanded(false);
+                  }}
+                >
+                  {category}
+                </button>
               ))}
             </div>
-            <Link to="/blog" className="mt-6 inline-block font-medium text-primary">
-              View all articles →
-            </Link>
-          </section>
-
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-card">
-              <h3 className="text-base font-semibold">Browse by topic</h3>
-              <ul className="mt-4 space-y-2 text-sm">
-                {categories.map((c) => (
-                  <li key={c}>
-                    <Link
-                      to="/blog"
-                      search={{ category: c }}
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      {c}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <Newsletter />
+            <button
+              className="quick-read-filter"
+              aria-pressed={shortOnly}
+              onClick={() => {
+                setShortOnly(!shortOnly);
+                setExpanded(false);
+              }}
+            >
+              <Clock3 size={13} /> 5 min or less
+            </button>
           </div>
-        </div>
+          <p className="sr-only" role="status">
+            {stories.length} recent stories match your selection
+          </p>
+          <div className="home-feed">
+            {displayed.map((post) => (
+              <PostCard key={post.slug} post={post} />
+            ))}
+          </div>
+          {!stories.length && (
+            <div className="feed-empty">
+              <p>No recent stories match these filters.</p>
+              <Link
+                to="/blog"
+                search={{ category: topic || undefined, sort: shortOnly ? "shortest" : "latest" }}
+              >
+                Explore more in the library →
+              </Link>
+            </div>
+          )}
+          <div className="feed-actions">
+            {stories.length > 4 && (
+              <button className="secondary-action" onClick={() => setExpanded(!expanded)}>
+                {expanded ? "Show fewer stories" : `Show ${stories.length - 4} more stories`}
+              </button>
+            )}
+            <Link to="/blog" className="text-sm font-medium text-primary">
+              Explore the full library <ArrowRight size={15} />
+            </Link>
+          </div>
+        </section>
+        <aside className="discovery-sidebar">
+          <div className="personalization-panel">
+            <PersonalizedReading />
+          </div>
+          <Newsletter />
+        </aside>
       </div>
-    </>
+      {site.show_reading_path && (
+        <details className="beginner-path">
+          <summary>
+            <span>
+              <Compass size={18} />
+              <strong>New to AI? Start with a clear path.</strong>
+            </span>
+            <span>3 steps to get going</span>
+          </summary>
+          <ReadingPath posts={path} />
+        </details>
+      )}
+      <div className="home-house-ad">
+        <AdSlot format="leaderboard" />
+      </div>
+    </div>
   );
 }

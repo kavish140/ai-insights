@@ -99,13 +99,14 @@ function BlogIndex() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-      <header className="max-w-2xl">
+      <header className="archive-heading max-w-2xl">
+        <p className="section-eyebrow mb-4">THE AI INSIGHTS LIBRARY</p>
         <h1 className="text-3xl font-bold md:text-4xl">{seo.heading}</h1>
         <p className="mt-3 text-muted-foreground">{seo.description}</p>
       </header>
 
       <form
-        className="mt-8 flex flex-wrap items-end gap-3"
+        className="article-filters mt-8 flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -139,48 +140,59 @@ function BlogIndex() {
             className="mt-2 w-full rounded-lg border border-input bg-surface px-4 py-2.5"
           />
         </label>
-        <label className="text-sm font-medium">
-          Topic tag
-          <input
-            key={search.tag}
-            name="tag"
-            maxLength={40}
-            defaultValue={search.tag ?? ""}
-            placeholder="e.g. ai agents"
-            className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          For readers
-          <input
-            key={search.audience}
-            name="audience"
-            maxLength={40}
-            defaultValue={search.audience ?? ""}
-            placeholder="e.g. beginners"
-            className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
-          />
-        </label>
         <button className="rounded-lg bg-brand-gradient px-5 py-2.5 text-sm font-medium text-primary-foreground">
           Search
         </button>
-        <label className="text-sm font-medium">
-          Sort by
-          <select
-            value={search.sort ?? "latest"}
-            onChange={(event) => {
-              void navigate({
-                search: { ...search, sort: event.target.value as BlogSearch["sort"], page: 1 },
-              });
-            }}
-            className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
-          >
-            <option value="popular">Most read</option>
-            <option value="latest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="shortest">Shortest read</option>
-          </select>
-        </label>
+        <details
+          className="advanced-filters"
+          open={!!search.tag || !!search.audience || search.sort !== "latest"}
+        >
+          <summary>More filters &amp; sorting</summary>
+          <div className="advanced-filter-fields">
+            <label className="text-sm font-medium">
+              Topic tag
+              <input
+                key={search.tag}
+                name="tag"
+                maxLength={40}
+                defaultValue={search.tag ?? ""}
+                placeholder="e.g. ai agents"
+                className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              For readers
+              <input
+                key={search.audience}
+                name="audience"
+                maxLength={40}
+                defaultValue={search.audience ?? ""}
+                placeholder="e.g. beginners"
+                className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Sort by
+              <select
+                value={search.sort ?? "latest"}
+                onChange={(event) => {
+                  void navigate({
+                    search: { ...search, sort: event.target.value as BlogSearch["sort"], page: 1 },
+                  });
+                }}
+                className="mt-2 block rounded-lg border border-input bg-surface px-3 py-2.5"
+              >
+                <option value="popular">Most read</option>
+                <option value="latest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="shortest">Shortest read</option>
+              </select>
+            </label>
+            <button className="secondary-action" type="submit">
+              Apply filters
+            </button>
+          </div>
+        </details>
       </form>
       <nav aria-label="Categories" className="mt-6 flex flex-wrap gap-2">
         <Link

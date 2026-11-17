@@ -1,6 +1,7 @@
 import { Link, useLoaderData } from "@tanstack/react-router";
 import { useState } from "react";
 import { subscribeNewsletter } from "@/lib/engagement-functions";
+import { Mail } from "lucide-react";
 
 export function Newsletter() {
   const { engagement, site } = useLoaderData({ from: "__root__" });
@@ -11,8 +12,12 @@ export function Newsletter() {
   return (
     <section
       aria-label={`${site.name} newsletter`}
-      className="rounded-2xl border border-border bg-primary-soft/50 p-6"
+      className="newsletter-panel rounded-2xl border border-border p-6"
+      data-reveal
     >
+      <span className="newsletter-icon">
+        <Mail size={22} />
+      </span>
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">Keep learning</p>
       <h2 className="mt-2 text-xl font-semibold">{site.newsletter_title}</h2>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -60,6 +65,7 @@ export function Newsletter() {
                 autoComplete="email"
                 maxLength={254}
                 required
+                placeholder="you@example.com"
                 className="mt-2 w-full rounded-lg border border-input bg-surface px-3 py-2.5"
               />
             </label>

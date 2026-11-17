@@ -21,7 +21,12 @@ const steps = [
 
 export function ReadingPath({ posts }: { posts: (Post | null)[] }) {
   return (
-    <section id="start-here" className="scroll-mt-24 py-12" aria-labelledby="start-title">
+    <section
+      id="start-here"
+      className="reading-path scroll-mt-24 py-12"
+      aria-labelledby="start-title"
+      data-reveal
+    >
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">
         A practical starting point
       </p>
@@ -32,7 +37,10 @@ export function ReadingPath({ posts }: { posts: (Post | null)[] }) {
         {steps.map((step, index) => {
           const post = posts[index];
           return (
-            <div key={step.category} className="rounded-2xl border border-border bg-card p-6">
+            <div
+              key={step.category}
+              className="reading-step rounded-2xl border border-border bg-card p-6"
+            >
               <span className="grid h-9 w-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">
                 {index + 1}
               </span>

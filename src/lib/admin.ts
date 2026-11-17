@@ -143,6 +143,13 @@ export async function changeArticle(article: Article, action: "delete" | "draft"
   if (!data) throw new Error("This article changed or was removed. Refresh and try again.");
 }
 
+export async function setFeaturedArticle(postId: string | null) {
+  const { error } = await (
+    await browserClient()
+  ).rpc("admin_set_featured_post", { p_post_id: postId });
+  if (error) throw error;
+}
+
 export function usedBy(image: Media, articles: Article[]) {
   return articles.filter(
     (article) => article.cover_image_url === image.url || article.body.includes(image.url),

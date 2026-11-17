@@ -6,12 +6,16 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useLocation,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { SiteMotion } from "@/components/SiteMotion";
+import { ReaderProvider } from "@/components/ReaderProvider";
+import { readingBootstrap } from "@/lib/reading-settings";
 import { SITE } from "@/lib/posts";
 import { getSiteContent } from "@/lib/post-functions";
 import { EDITOR } from "@/lib/editorial";
@@ -153,8 +157,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: readingBootstrap }} />
         <HeadContent />
       </head>
       <body>
@@ -168,20 +173,26 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const content = Route.useLoaderData();
+  const adminPage = useLocation({
+    select: (location) => location.pathname.replace(/\/+$/, "") === "/admin",
+  });
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex min-h-screen flex-col">
-        <a href="#main-content" className="skip-link">
-          Skip to content
-        </a>
-        <SiteHeader site={content.site} />
-        <main id="main-content" tabIndex={-1} className="flex-1">
-          {/* Required: nested routes render here. */}
-          <Outlet />
-        </main>
-        <SiteFooter site={content.site} categories={content.categories} />
-      </div>
+      <ReaderProvider>
+        <SiteMotion />
+        <div className="flex min-h-screen flex-col">
+          <a href="#main-content" className="skip-link">
+            Skip to content
+          </a>
+          {!adminPage && <SiteHeader site={content.site} />}
+          <main id="main-content" tabIndex={-1} className="flex-1">
+            {/* Required: nested routes render here. */}
+            <Outlet />
+          </main>
+          {!adminPage && <SiteFooter site={content.site} categories={content.categories} />}
+        </div>
+      </ReaderProvider>
     </QueryClientProvider>
   );
 }

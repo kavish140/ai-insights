@@ -11,6 +11,7 @@ import { ArticleImage } from "@/components/ArticleImage";
 import { Newsletter } from "@/components/Newsletter";
 import { articleSchema, jsonLd } from "@/lib/seo";
 import { EDITOR } from "@/lib/editorial";
+import { ArticleReadingTools } from "@/components/ArticleReadingTools";
 
 export const Route = createFileRoute("/blog/$slug")({
   loader: async ({ params }) => {
@@ -76,9 +77,9 @@ function PostPage() {
   const takeaways = articleTakeaways(post.body);
 
   return (
-    <article>
+    <article className="reader-article">
       <ArticleTracker slug={post.slug} />
-      <header className="bg-hero border-b border-border">
+      <header className="article-header bg-hero border-b border-border">
         <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 md:py-20">
           <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
             <Link to="/" className="hover:text-foreground">
@@ -157,8 +158,9 @@ function PostPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0">
+      <div className="article-layout mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="article-column min-w-0">
+          <ArticleReadingTools key={`reading-${post.slug}`} post={post} next={related[0]} />
           {headings.length > 0 && (
             <details className="mb-6 rounded-xl border border-border bg-card p-5 lg:hidden">
               <summary className="cursor-pointer font-semibold">On this page</summary>
@@ -213,10 +215,11 @@ function PostPage() {
           )}
           <div
             data-article-body
+            tabIndex={-1}
             className="prose-article max-w-[70ch]"
             dangerouslySetInnerHTML={{ __html: html }}
           />
-          <ArticleFeedback key={post.slug} slug={post.slug} />
+          <ArticleFeedback key={`feedback-${post.slug}`} slug={post.slug} />
           {post.category === "Automation" && (
             <section className="mt-10 rounded-2xl border border-border bg-card p-6">
               <h2 className="text-lg font-semibold">Turn the guide into a tested workflow</h2>
